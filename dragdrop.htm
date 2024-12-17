@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <title>Drag-and-Drop mit schwebendem Element</title>
+  <title>Drag-and-Drop mit Platzhalter und Schwebendem Element</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -22,14 +22,15 @@
 
   <script>
     class SortableList extends HTMLElement {
-      items = [];
+      items = [];          // Datenquelle
       draggedIndex = null; // Index des gezogenen Elements
-      targetIndex = null;  // Zielposition für das Element
-      currentY = 0;        // Aktuelle Finger-/Mausposition
+      placeholderIndex = null; // Zielposition
+      floatingElement = null; // Schwebendes Element
+      currentY = 0;
 
       constructor() {
         super();
-        this.attachShadow({ mode: "open" });
+        this.attachShadow({ mode: 'open' });
       }
 
       connectedCallback() {
@@ -39,10 +40,10 @@
 
       /** Initialisiere die Datenquelle */
       initializeItems() {
-        this.items = Array.from(this.children).map(child => child.outerHTML.trim());
+        this.items = Array.from(this.children).map((child) => child.outerHTML.trim());
       }
 
-      /** Rendert die Liste basierend auf der Datenquelle */
+      /** Rendert die Liste */
       render() {
         this.shadowRoot.innerHTML = `
           <style>
@@ -54,119 +55,137 @@
               border-radius: 4px;
               cursor: grab;
               user-select: none;
-              transition: transform 0.2s ease;
+              transition: box-shadow 0.2s ease;
             }
             .dragging {
-              position: absolute;
-              z-index: 1000;
-              background: #ffffe0;
-              box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-              opacity: 0.8;
-              transform: scale(1.05);
-              pointer-events: none;
+              opacity: 0;
             }
             .placeholder {
               height: 40px;
-              background: #e0e0e0;
+              background: #ddd;
               border: 2px dashed #aaa;
               margin: 4px 0;
             }
+            .floating {
+              position: fixed;
+              z-index: 1000;
+              pointer-events: none;
+              box-shadow: 0 10px 15px rgba(0, 0, 0, 0.2);
+              background: #f3f3f3;
+              padding: 10px;
+              border: 1px solid #ccc;
+              border-radius: 4px;
+            }
           </style>
-          ${this.items.map((content, index) => {
-            return index === this.targetIndex
-              ? `<div class="placeholder"></div><div class="item" draggable="true" data-index="${index}">${content}</div>`
-              : `<div class="item" draggable="true" data-index="${index}">${content}</div>`;
-          }).join("")}
-          ${this.targetIndex === this.items.length
-            ? '<div class="placeholder"></div>'
-            : ""}
+          ${this.items.map((content, index) => `
+            ${index === this.placeholderIndex ? '<div class="placeholder"></div>' : ''}
+            <div class="item" draggable="true" data-index="${index}">
+              ${content}
+            </div>
+          `).join('')}
         `;
         this.addEventListeners();
       }
 
       /** Fügt Event-Handler hinzu */
       addEventListeners() {
-        const items = this.shadowRoot.querySelectorAll(".item");
-        items.forEach(item => {
-          item.addEventListener("dragstart", (e) => this.onDragStart(e, item));
-          item.addEventListener("dragover", (e) => this.onDragOver(e));
-          item.addEventListener("drop", () => this.onDrop());
-          item.addEventListener("touchstart", (e) => this.onTouchStart(e, item), { passive: false });
-          item.addEventListener("touchmove", (e) => this.onTouchMove(e), { passive: false });
-          item.addEventListener("touchend", () => this.onTouchEnd());
+        const items = this.shadowRoot.querySelectorAll('.item');
+        items.forEach((item) => {
+          item.addEventListener('dragstart', (e) => this.onDragStart(e, item));
+          item.addEventListener('dragover', (e) => e.preventDefault());
+          item.addEventListener('drop', (e) => this.onDrop(e));
+
+          item.addEventListener('touchstart', (e) => this.onTouchStart(e, item), { passive: false });
+          item.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
+          item.addEventListener('touchend', () => this.onTouchEnd());
         });
       }
 
       /** Drag-Start */
       onDragStart(event, item) {
         this.draggedIndex = parseInt(item.dataset.index);
-        this.targetIndex = this.draggedIndex;
-        item.classList.add("dragging");
-        event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setDragImage(item, 0, 0);
-      }
-
-      /** Drag-Over */
-      onDragOver(event) {
-        event.preventDefault();
-        const items = Array.from(this.shadowRoot.querySelectorAll(".item"));
-        const currentY = event.clientY;
-
-        items.forEach((el, index) => {
-          const rect = el.getBoundingClientRect();
-          if (currentY > rect.top && currentY < rect.bottom) {
-            this.targetIndex = index;
-          }
-        });
+        this.placeholderIndex = this.draggedIndex;
+        this.createFloatingElement(item);
+        item.classList.add('dragging');
         this.render();
       }
 
       /** Drop */
-      onDrop() {
-        this.updateOrder();
+      onDrop(event) {
+        this.finalizeMove();
       }
 
       /** Touch-Start */
       onTouchStart(event, item) {
         event.preventDefault();
         this.draggedIndex = parseInt(item.dataset.index);
-        this.targetIndex = this.draggedIndex;
-        this.currentY = event.touches[0].clientY;
-        item.classList.add("dragging");
+        this.placeholderIndex = this.draggedIndex;
+        this.createFloatingElement(item);
+        item.classList.add('dragging');
       }
 
       /** Touch-Move */
       onTouchMove(event) {
         event.preventDefault();
-        const touchY = event.touches[0].clientY;
-        const items = Array.from(this.shadowRoot.querySelectorAll(".item"));
+        this.updateFloatingElementPosition(event.touches[0].clientX, event.touches[0].clientY);
+        this.updatePlaceholder(event.touches[0].clientY);
+      }
+
+      /** Touch-End */
+      onTouchEnd() {
+        this.finalizeMove();
+      }
+
+      /** Erstelle das schwebende Element */
+      createFloatingElement(item) {
+        this.floatingElement = document.createElement('div');
+        this.floatingElement.innerHTML = item.innerHTML;
+        this.floatingElement.classList.add('floating');
+        document.body.appendChild(this.floatingElement);
+      }
+
+      /** Aktualisiere die Position des schwebenden Elements */
+      updateFloatingElementPosition(x, y) {
+        if (this.floatingElement) {
+          this.floatingElement.style.left = `${x}px`;
+          this.floatingElement.style.top = `${y}px`;
+        }
+      }
+
+      /** Aktualisiere die Zielposition */
+      updatePlaceholder(currentY) {
+        const items = Array.from(this.shadowRoot.querySelectorAll('.item'));
         items.forEach((el, index) => {
           const rect = el.getBoundingClientRect();
-          if (touchY > rect.top && touchY < rect.bottom) {
-            this.targetIndex = index;
+          if (currentY > rect.top && currentY < rect.bottom) {
+            this.placeholderIndex = index;
           }
         });
         this.render();
       }
 
-      /** Touch-End */
-      onTouchEnd() {
-        this.updateOrder();
+      /** Finalisiere das Verschieben */
+      finalizeMove() {
+        if (this.draggedIndex !== null && this.placeholderIndex !== null) {
+          const [movedItem] = this.items.splice(this.draggedIndex, 1);
+          this.items.splice(this.placeholderIndex, 0, movedItem);
+        }
+        this.cleanup();
+        this.render();
       }
 
-      /** Aktualisiere die Reihenfolge */
-      updateOrder() {
-        if (this.draggedIndex !== null && this.targetIndex !== null) {
-          const [movedItem] = this.items.splice(this.draggedIndex, 1);
-          this.items.splice(this.targetIndex, 0, movedItem);
-        }
+      /** Aufräumen */
+      cleanup() {
         this.draggedIndex = null;
-        this.targetIndex = null;
-        this.render();
+        this.placeholderIndex = null;
+        if (this.floatingElement) {
+          this.floatingElement.remove();
+          this.floatingElement = null;
+        }
       }
     }
 
-    customElements.define("sortable-list", SortableList);
+    customElements.define('sortable-list', SortableList);
   </script>
 </body>
 </html>
