@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <title>Drag-and-Drop mit Platzhalter</title>
+  <title>Drag-and-Drop mit schwebendem Element</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -22,11 +22,11 @@
 
   <script>
     class SortableList extends HTMLElement {
-      items = []; // Datenquelle
-      draggedIndex = null; // Index des gezogenen Elements
-      placeholderIndex = null; // Index für Zielposition
-      startY = 0; // Startposition des Touch
-      currentY = 0;
+      items = [];
+      draggedIndex = null;
+      placeholderIndex = null;
+      floatingElement = null;
+      startY = 0;
 
       constructor() {
         super();
@@ -38,7 +38,7 @@
         this.render();
       }
 
-      /** Initialisiere Datenquelle */
+      /** Datenquelle initialisieren */
       initializeItems() {
         this.items = Array.from(this.children).map(child => child.outerHTML.trim());
       }
@@ -55,11 +55,6 @@
               border-radius: 4px;
               cursor: grab;
               user-select: none;
-              transition: transform 0.1s ease;
-            }
-            .dragging {
-              opacity: 0.5;
-              cursor: grabbing;
             }
             .placeholder {
               height: 10px;
@@ -67,12 +62,20 @@
               margin: 4px 0;
               border-radius: 4px;
             }
+            .floating {
+              position: absolute;
+              z-index: 1000;
+              pointer-events: none;
+              background: #f9f9f9;
+              border: 2px solid #3498db;
+              box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            }
           </style>
           ${this.items.map((content, index) => `
-            ${index === this.placeholderIndex ? `<div class="placeholder"></div>` : ''}
+            ${index === this.placeholderIndex ? '<div class="placeholder"></div>' : ''}
             <div class="item" draggable="true" data-index="${index}">${content}</div>
           `).join('')}
-          ${this.placeholderIndex === this.items.length ? `<div class="placeholder"></div>` : ''}
+          ${this.placeholderIndex === this.items.length ? '<div class="placeholder"></div>' : ''}
         `;
         this.addEventListeners();
       }
@@ -81,12 +84,10 @@
       addEventListeners() {
         const items = this.shadowRoot.querySelectorAll('.item');
         items.forEach(item => {
-          // Drag-and-Drop Events (Desktop)
           item.addEventListener('dragstart', (e) => this.onDragStart(e, item));
           item.addEventListener('dragover', (e) => this.onDragOver(e, item));
           item.addEventListener('drop', () => this.onDrop());
 
-          // Touch Events (Mobile)
           item.addEventListener('touchstart', (e) => this.onTouchStart(e, item), { passive: false });
           item.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
           item.addEventListener('touchend', () => this.onTouchEnd());
@@ -96,7 +97,7 @@
       /** Drag Start */
       onDragStart(event, item) {
         this.draggedIndex = parseInt(item.dataset.index);
-        item.classList.add('dragging');
+        this.createFloatingElement(item);
       }
 
       /** Drag Over */
@@ -109,7 +110,7 @@
         }
       }
 
-      /** Drop: Sortierung aktualisieren */
+      /** Drop: Aktualisiere Reihenfolge */
       onDrop() {
         this.updateOrder(this.placeholderIndex);
       }
@@ -119,18 +120,22 @@
         event.preventDefault();
         this.draggedIndex = parseInt(item.dataset.index);
         this.startY = event.touches[0].clientY;
-        item.classList.add('dragging');
+        this.createFloatingElement(item);
       }
 
-      /** Touch Move: Zielposition berechnen */
+      /** Touch Move */
       onTouchMove(event) {
         event.preventDefault();
-        this.currentY = event.touches[0].clientY;
+        const deltaY = event.touches[0].clientY - this.startY;
+
+        if (this.floatingElement) {
+          this.floatingElement.style.transform = `translateY(${deltaY}px)`;
+        }
 
         const items = Array.from(this.shadowRoot.querySelectorAll('.item'));
         items.forEach((el, index) => {
           const rect = el.getBoundingClientRect();
-          if (this.currentY > rect.top && this.currentY < rect.bottom) {
+          if (event.touches[0].clientY > rect.top && event.touches[0].clientY < rect.bottom) {
             this.placeholderIndex = index;
           }
         });
@@ -143,15 +148,29 @@
         this.updateOrder(this.placeholderIndex);
       }
 
+      /** Erstelle das schwebende Element */
+      createFloatingElement(item) {
+        this.floatingElement = item.cloneNode(true);
+        this.floatingElement.classList.add('floating');
+        this.floatingElement.style.left = `${item.getBoundingClientRect().left}px`;
+        this.floatingElement.style.top = `${item.getBoundingClientRect().top}px`;
+        this.floatingElement.style.width = `${item.offsetWidth}px`;
+        document.body.appendChild(this.floatingElement);
+      }
+
       /** Reihenfolge aktualisieren */
       updateOrder(targetIndex) {
         if (this.draggedIndex !== null && targetIndex !== null) {
           const [movedItem] = this.items.splice(this.draggedIndex, 1);
           this.items.splice(targetIndex, 0, movedItem);
-          this.draggedIndex = null;
-          this.placeholderIndex = null;
-          this.render();
         }
+        this.draggedIndex = null;
+        this.placeholderIndex = null;
+        if (this.floatingElement) {
+          document.body.removeChild(this.floatingElement);
+          this.floatingElement = null;
+        }
+        this.render();
       }
     }
 
