@@ -1,168 +1,142 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sortable Web Component (Mobil unterstützt)</title>
+  <title>Sortable List Web Component</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background-color: #f9f9f9;
+    }
+    h1 {
+      text-align: center;
+      font-size: 24px;
+    }
+  </style>
 </head>
 <body>
+  <h1>Drag & Drop Sortable List</h1>
+
   <!-- Verwendung der Web Component -->
-  <sortable-container>
-    <div>Item 1</div>
-    <div>Item 2</div>
-    <div>Item 3</div>
-  </sortable-container>
+  <sortable-list>
+    <div class="item">Element 1</div>
+    <div class="item">Element 2</div>
+    <div class="item">Element 3</div>
+    <div class="item">Element 4</div>
+    <div class="item">Element 5</div>
+  </sortable-list>
 
   <script>
-    class SortableContainer extends HTMLElement {
+    // Web Component Definition
+    class SortableList extends HTMLElement {
       constructor() {
         super();
-        this.attachShadow({ mode: 'open' });
-
-        // HTML-Template für die Web Component
-        this.shadowRoot.innerHTML = `
-          <style>
-            :host {
-              display: block;
-            }
-            .sortable-container {
-              display: flex;
-              flex-direction: column;
-              gap: 0.5rem;
-            }
-            .sortable-item {
-              padding: 1rem;
-              border: 1px solid #ccc;
-              background-color: #f9f9f9;
-              cursor: grab;
-              user-select: none;
-              transition: transform 0.2s;
-            }
-            .sortable-item.dragging {
-              opacity: 0.5;
-              background-color: #e0e0e0;
-            }
-          </style>
-          <div class="sortable-container">
-            <slot></slot>
-          </div>
-        `;
-
-        this.sortableContainer = this.shadowRoot.querySelector('.sortable-container');
-        this.draggedItem = null;
-        this.touchStartY = 0;
-        this.touchEndY = 0;
+        this.attachShadow({ mode: "open" });
+        this.items = [];
       }
 
       connectedCallback() {
-        this._initSortableItems();
+        this.initTemplate();
+        this.collectItems();
+        this.render();
+        this.addDragAndDrop();
       }
 
-      _initSortableItems() {
-        const slot = this.shadowRoot.querySelector('slot');
-        slot.addEventListener('slotchange', () => {
-          const items = slot.assignedElements().filter(el => el.tagName !== 'STYLE');
+      initTemplate() {
+        const template = document.createElement("template");
+        template.innerHTML = `
+          <style>
+            ::slotted(.item) {
+              padding: 10px;
+              margin: 5px;
+              background-color: #f0f0f0;
+              border: 1px solid #ddd;
+              border-radius: 4px;
+              cursor: move;
+              user-select: none;
+              transition: background 0.2s, transform 0.2s;
+            }
 
-          items.forEach(item => {
-            item.classList.add('sortable-item');
+            ::slotted(.item.dragging) {
+              background-color: #d0e4ff;
+              opacity: 0.7;
+              transform: scale(1.05);
+            }
+          </style>
+          <slot></slot>
+        `;
+        this.shadowRoot.appendChild(template.content.cloneNode(true));
+      }
 
-            // Drag-and-Drop Events
-            item.draggable = true;
-            item.addEventListener('dragstart', (e) => this._onDragStart(e, item));
-            item.addEventListener('dragover', (e) => this._onDragOver(e));
-            item.addEventListener('dragend', () => this._onDragEnd(item));
-            item.addEventListener('drop', (e) => this._onDrop(e, item));
+      collectItems() {
+        const slot = this.shadowRoot.querySelector("slot");
+        this.items = Array.from(slot.assignedElements()).filter((el) =>
+          el.classList.contains("item")
+        );
+      }
 
-            // Touch Events für mobile Geräte
-            item.addEventListener('touchstart', (e) => this._onTouchStart(e, item));
-            item.addEventListener('touchmove', (e) => this._onTouchMove(e, item));
-            item.addEventListener('touchend', () => this._onTouchEnd(item));
+      render() {
+        this.items.forEach((item, index) => {
+          item.dataset.index = index; // Datenbindung
+        });
+      }
+
+      addDragAndDrop() {
+        let draggedItem = null;
+
+        this.items.forEach((item) => {
+          item.draggable = true;
+
+          item.addEventListener("dragstart", (e) => {
+            draggedItem = item;
+            item.classList.add("dragging");
+            e.dataTransfer.effectAllowed = "move";
+          });
+
+          item.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            const target = e.target;
+            if (target && target !== draggedItem && target.classList.contains("item")) {
+              const draggedIndex = parseInt(draggedItem.dataset.index, 10);
+              const targetIndex = parseInt(target.dataset.index, 10);
+
+              if (draggedIndex < targetIndex) {
+                target.after(draggedItem);
+              } else {
+                target.before(draggedItem);
+              }
+
+              this.updateData();
+            }
+          });
+
+          item.addEventListener("dragend", () => {
+            draggedItem.classList.remove("dragging");
+            draggedItem = null;
           });
         });
       }
 
-      // Drag-and-Drop Handlers
-      _onDragStart(event, item) {
-        this.draggedItem = item;
-        item.classList.add('dragging');
-        event.dataTransfer.effectAllowed = 'move';
-      }
-
-      _onDragOver(event) {
-        event.preventDefault();
-      }
-
-      _onDrop(event, targetItem) {
-        event.preventDefault();
-        this._moveItem(this.draggedItem, targetItem);
-      }
-
-      _onDragEnd(item) {
-        item.classList.remove('dragging');
-        this.draggedItem = null;
-      }
-
-      // Touch Event Handlers (Mobil)
-      _onTouchStart(event, item) {
-        this.draggedItem = item;
-        this.touchStartY = event.touches[0].clientY;
-        item.classList.add('dragging');
-      }
-
-      _onTouchMove(event, item) {
-        this.touchEndY = event.touches[0].clientY;
-        const targetItem = this._getClosestElement(item, this.touchEndY);
-        if (targetItem && targetItem !== this.draggedItem) {
-          this._moveItem(this.draggedItem, targetItem);
-        }
-      }
-
-      _onTouchEnd(item) {
-        item.classList.remove('dragging');
-        this.draggedItem = null;
-      }
-
-      // Hilfsfunktionen
-      _moveItem(draggedItem, targetItem) {
-        const container = this.sortableContainer;
-        const items = [...this.children];
-        const draggedIndex = items.indexOf(draggedItem);
-        const targetIndex = items.indexOf(targetItem);
-
-        if (draggedIndex > targetIndex) {
-          container.insertBefore(draggedItem, targetItem);
-        } else {
-          container.insertBefore(draggedItem, targetItem.nextSibling);
-        }
-
-        this._updateDataModel();
-      }
-
-      _getClosestElement(draggedItem, touchY) {
-        const items = [...this.children];
-        return items.reduce((closest, child) => {
-          if (child !== draggedItem) {
-            const box = child.getBoundingClientRect();
-            const offset = Math.abs(touchY - (box.top + box.height / 2));
-            if (offset < closest.offset) {
-              return { offset, element: child };
-            }
-          }
-          return closest;
-        }, { offset: Number.POSITIVE_INFINITY }).element;
-      }
-
-      _updateDataModel() {
-        const slot = this.shadowRoot.querySelector('slot');
-        const sortedItems = slot.assignedElements().filter(el => el.tagName !== 'STYLE');
-
-        this.dispatchEvent(new CustomEvent('sort', {
-          detail: sortedItems.map(item => item.textContent)
-        }));
+      updateData() {
+        this.items = Array.from(this.querySelectorAll(".item"));
+        this.render();
       }
     }
 
-    customElements.define('sortable-container', SortableContainer);
+    customElements.define("sortable-list", SortableList);
+
+    // Polyfill für mobile Geräte (falls notwendig)
+    (function () {
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobile) {
+        const script = document.createElement("script");
+        script.src = "https://cdn.jsdelivr.net/npm/mobile-drag-drop@latest/index.min.js";
+        script.onload = () => window.mobileDragDrop.polyfill();
+        document.head.appendChild(script);
+      }
+    })();
   </script>
 </body>
 </html>
