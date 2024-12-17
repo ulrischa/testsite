@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <title>Drag-and-Drop mit optischem Schieben</title>
+  <title>Drag-and-Drop mit Schattenlinie</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -22,14 +22,13 @@
 
   <script>
     class SortableList extends HTMLElement {
-      items = [];           // Datenquelle
-      draggedIndex = null;  // Index des gezogenen Elements
-      targetIndex = null;   // Zielposition des Elements
-      currentY = 0;
+      items = [];
+      draggedIndex = null;
+      insertLineIndex = null;
 
       constructor() {
         super();
-        this.attachShadow({ mode: "open" });
+        this.attachShadow({ mode: 'open' });
       }
 
       connectedCallback() {
@@ -37,140 +36,105 @@
         this.render();
       }
 
-      /** Initialisiere die Datenquelle */
       initializeItems() {
-        this.items = Array.from(this.children).map((child) => child.outerHTML.trim());
+        this.items = Array.from(this.children).map(child => child.outerHTML.trim());
       }
 
-      /** Rendert die Liste basierend auf der Datenquelle */
       render() {
         this.shadowRoot.innerHTML = `
           <style>
             .item {
               padding: 10px;
-              margin: 4px 0;
+              margin: 0;
               background: #f3f3f3;
               border: 1px solid #ccc;
               border-radius: 4px;
               cursor: grab;
               user-select: none;
-              transition: transform 0.2s ease;
             }
             .dragging {
               opacity: 0.5;
-              z-index: 1000;
               cursor: grabbing;
-              position: relative;
             }
-            .shifted {
-              transform: translateY(40px);
-            }
-            .shifted-up {
-              transform: translateY(-40px);
+            .insert-line {
+              height: 4px;
+              background: #0078ff;
+              margin: 0;
             }
           </style>
-          ${this.items
-            .map(
-              (content, index) =>
-                `<div class="item ${this.getShiftClass(index)}" draggable="true" data-index="${index}">
-                  ${content}
-                </div>`
-            )
-            .join("")}
+          ${this.items.map((content, index) => `
+            ${index === this.insertLineIndex ? '<div class="insert-line"></div>' : ''}
+            <div class="item" draggable="true" data-index="${index}">${content}</div>
+          `).join('')}
+          ${this.insertLineIndex === this.items.length ? '<div class="insert-line"></div>' : ''}
         `;
         this.addEventListeners();
       }
 
-      /** Ermittelt die Klasse für visuelles Verschieben */
-      getShiftClass(index) {
-        if (this.draggedIndex === null || this.targetIndex === null) return "";
-        if (index === this.targetIndex) return "shifted"; // Platz für das gezogene Element
-        if (this.draggedIndex < this.targetIndex && index > this.draggedIndex && index <= this.targetIndex)
-          return "shifted-up";
-        if (this.draggedIndex > this.targetIndex && index >= this.targetIndex && index < this.draggedIndex)
-          return "shifted";
-        return "";
-      }
-
-      /** Fügt Event-Handler hinzu */
       addEventListeners() {
-        const items = this.shadowRoot.querySelectorAll(".item");
-        items.forEach((item) => {
-          item.addEventListener("dragstart", (e) => this.onDragStart(e, item));
-          item.addEventListener("dragover", (e) => this.onDragOver(e, item));
-          item.addEventListener("drop", () => this.onDrop());
-          item.addEventListener("touchstart", (e) => this.onTouchStart(e, item), { passive: false });
-          item.addEventListener("touchmove", (e) => this.onTouchMove(e), { passive: false });
-          item.addEventListener("touchend", () => this.onTouchEnd());
+        const items = this.shadowRoot.querySelectorAll('.item');
+        items.forEach(item => {
+          item.addEventListener('dragstart', (e) => this.onDragStart(e, item));
+          item.addEventListener('dragover', (e) => this.onDragOver(e, item));
+          item.addEventListener('drop', () => this.onDrop());
+
+          item.addEventListener('touchstart', (e) => this.onTouchStart(e, item), { passive: false });
+          item.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
+          item.addEventListener('touchend', () => this.onTouchEnd());
         });
       }
 
-      /** Drag-Start */
       onDragStart(event, item) {
         this.draggedIndex = parseInt(item.dataset.index);
-        this.targetIndex = this.draggedIndex;
-        item.classList.add("dragging");
-        this.render();
+        item.classList.add('dragging');
       }
 
-      /** Drag-Over */
       onDragOver(event, target) {
         event.preventDefault();
         const targetIndex = parseInt(target.dataset.index);
-        if (targetIndex !== this.targetIndex) {
-          this.targetIndex = targetIndex;
-          this.render();
-        }
+        this.insertLineIndex = targetIndex;
+        this.render();
       }
 
-      /** Drop */
       onDrop() {
-        this.updateOrder();
+        this.updateOrder(this.insertLineIndex);
       }
 
-      /** Touch-Start */
       onTouchStart(event, item) {
         event.preventDefault();
         this.draggedIndex = parseInt(item.dataset.index);
-        this.targetIndex = this.draggedIndex;
-        this.currentY = event.touches[0].clientY;
-        item.classList.add("dragging");
       }
 
-      /** Touch-Move */
       onTouchMove(event) {
         event.preventDefault();
-        const deltaY = event.touches[0].clientY - this.currentY;
-        this.currentY = event.touches[0].clientY;
+        const touchY = event.touches[0].clientY;
 
-        const items = Array.from(this.shadowRoot.querySelectorAll(".item"));
+        const items = Array.from(this.shadowRoot.querySelectorAll('.item'));
         items.forEach((el, index) => {
           const rect = el.getBoundingClientRect();
-          if (this.currentY > rect.top && this.currentY < rect.bottom) {
-            this.targetIndex = index;
+          if (touchY < rect.bottom) {
+            this.insertLineIndex = index;
           }
         });
         this.render();
       }
 
-      /** Touch-End */
       onTouchEnd() {
-        this.updateOrder();
+        this.updateOrder(this.insertLineIndex);
       }
 
-      /** Aktualisiere die Reihenfolge */
-      updateOrder() {
-        if (this.draggedIndex !== null && this.targetIndex !== null && this.draggedIndex !== this.targetIndex) {
+      updateOrder(targetIndex) {
+        if (this.draggedIndex !== null && targetIndex !== null) {
           const [movedItem] = this.items.splice(this.draggedIndex, 1);
-          this.items.splice(this.targetIndex, 0, movedItem);
+          this.items.splice(targetIndex, 0, movedItem);
         }
         this.draggedIndex = null;
-        this.targetIndex = null;
+        this.insertLineIndex = null;
         this.render();
       }
     }
 
-    customElements.define("sortable-list", SortableList);
+    customElements.define('sortable-list', SortableList);
   </script>
 </body>
 </html>
