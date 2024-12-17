@@ -22,11 +22,10 @@
 
   <script>
     class SortableList extends HTMLElement {
-      items = [];           // Datenquelle
-      draggedIndex = null;  // Index des gezogenen Elements
-      placeholderIndex = null; // Zielposition des Platzhalters
-      startY = 0;           // Startposition der Fingerbewegung
-      currentY = 0;         // Aktuelle Fingerposition
+      items = [];             // Datenquelle
+      draggedIndex = null;    // Index des gezogenen Elements
+      placeholderIndex = null; // Index des Platzhalters
+      currentY = 0;           // Aktuelle Position der Finger/Mausbewegung
 
       constructor() {
         super();
@@ -55,13 +54,10 @@
               border-radius: 4px;
               cursor: grab;
               user-select: none;
-              transition: transform 0.1s ease, box-shadow 0.1s ease;
             }
             .dragging {
-              opacity: 0.7;
-              z-index: 1000;
+              opacity: 0.5;
               cursor: grabbing;
-              box-shadow: 0 4px 6px rgba(0,0,0,0.2);
             }
             .placeholder {
               height: 40px;
@@ -81,20 +77,21 @@
         this.addEventListeners();
       }
 
-      /** Fügt Event-Handler hinzu */
+      /** Event-Handler hinzufügen */
       addEventListeners() {
         const items = this.shadowRoot.querySelectorAll('.item');
         items.forEach((item) => {
           item.addEventListener('dragstart', (e) => this.onDragStart(e, item));
           item.addEventListener('dragover', (e) => this.onDragOver(e, item));
           item.addEventListener('drop', () => this.onDrop());
+
           item.addEventListener('touchstart', (e) => this.onTouchStart(e, item), { passive: false });
           item.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
           item.addEventListener('touchend', () => this.onTouchEnd());
         });
       }
 
-      /** Drag-Start */
+      /** Drag Start */
       onDragStart(event, item) {
         this.draggedIndex = parseInt(item.dataset.index);
         this.placeholderIndex = this.draggedIndex;
@@ -102,7 +99,7 @@
         this.render();
       }
 
-      /** Drag-Over: Aktualisiere den Platzhalter */
+      /** Drag Over: Platzhalter aktualisieren */
       onDragOver(event, target) {
         event.preventDefault();
         const targetIndex = parseInt(target.dataset.index);
@@ -112,46 +109,43 @@
         }
       }
 
-      /** Drop: Aktualisiere die Reihenfolge */
+      /** Drop: Aktualisiere Reihenfolge */
       onDrop() {
         this.updateOrder(this.placeholderIndex);
       }
 
-      /** Touch-Start */
+      /** Touch Start */
       onTouchStart(event, item) {
         event.preventDefault();
         this.draggedIndex = parseInt(item.dataset.index);
         this.placeholderIndex = this.draggedIndex;
-        this.startY = event.touches[0].clientY;
+        this.currentY = event.touches[0].clientY;
         item.classList.add('dragging');
       }
 
-      /** Touch-Move */
+      /** Touch Move: Aktualisiere Platzhalter */
       onTouchMove(event) {
         event.preventDefault();
-        const deltaY = event.touches[0].clientY - this.startY;
+        const deltaY = event.touches[0].clientY - this.currentY;
         this.currentY = event.touches[0].clientY;
 
         const items = Array.from(this.shadowRoot.querySelectorAll('.item'));
         items.forEach((el, index) => {
           const rect = el.getBoundingClientRect();
-          const middle = rect.top + rect.height / 2;
-
-          if (this.currentY > middle) {
-            this.placeholderIndex = index + 1; // Nach unten
-          } else if (this.currentY < middle) {
-            this.placeholderIndex = index; // Nach oben
+          if (this.currentY > rect.top && this.currentY < rect.bottom) {
+            this.placeholderIndex = index;
           }
         });
+
         this.render();
       }
 
-      /** Touch-End */
+      /** Touch End: Finalisiere Reihenfolge */
       onTouchEnd() {
         this.updateOrder(this.placeholderIndex);
       }
 
-      /** Aktualisiere die Reihenfolge */
+      /** Aktualisiere die Reihenfolge in der Datenquelle */
       updateOrder(targetIndex) {
         if (this.draggedIndex !== null && targetIndex !== null) {
           const [movedItem] = this.items.splice(this.draggedIndex, 1);
