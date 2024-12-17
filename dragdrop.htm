@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Sortierbare Liste mit Touch- und Drag-Support</title>
+</head>
+<body>
+  <sortable-list>
+    <div>Element 1</div>
+    <div>Element 2</div>
+    <div>Element 3</div>
+    <div>Element 4</div>
+  </sortable-list>
+
+  <script>
+    class SortableList extends HTMLElement {
+      items = [];
+      draggedItem = null;
+
+      constructor() {
+        super();
+        this.attachShadow({ mode: "open" });
+      }
+
+      connectedCallback() {
+        this.initializeItems();
+        this.render();
+      }
+
+      initializeItems() {
+        this.items = Array.from(this.children);
+      }
+
+      render() {
+        this.shadowRoot.innerHTML = `
+          <style>
+            ::slotted(*) {
+              padding: 10px;
+              margin: 4px 0;
+              background: #f3f3f3;
+              border: 1px solid #ccc;
+              border-radius: 4px;
+              cursor: move;
+              user-select: none;
+              transition: transform 0.2s ease;
+            }
+            .dragging {
+              opacity: 0.5;
+            }
+          </style>
+          <slot></slot>
+        `;
+
+        this.items.forEach((item) => {
+          item.draggable = true;
+
+          // Desktop Events
+          item.addEventListener("dragstart", () => this.onDragStart(item));
+          item.addEventListener("dragover", (e) => e.preventDefault());
+          item.addEventListener("drop", () => this.onDrop(item));
+
+          // Touch Events
+          item.addEventListener("touchstart", (e) => this.onTouchStart(e, item));
+          item.addEventListener("touchmove", (e) => this.onTouchMove(e));
+          item.addEventListener("touchend", () => this.onTouchEnd());
+        });
+      }
+
+      onDragStart(item) {
+        this.draggedItem = item;
+        item.classList.add("dragging");
+      }
+
+      onDrop(target) {
+        if (this.draggedItem && this.draggedItem !== target) {
+          this.insertBefore(this.draggedItem, target);
+        }
+        this.reset();
+      }
+
+      onTouchStart(event, item) {
+        this.draggedItem = item;
+        item.classList.add("dragging");
+        this.startY = event.touches[0].clientY;
+      }
+
+      onTouchMove(event) {
+        if (!this.draggedItem) return;
+
+        const currentY = event.touches[0].clientY;
+        const deltaY = currentY - this.startY;
+
+        this.draggedItem.style.transform = `translateY(${deltaY}px)`;
+
+        // Erkennen des Ziel-Elements
+        const target = document.elementFromPoint(event.touches[0].clientX, currentY);
+        if (target && target !== this.draggedItem && this.contains(target)) {
+          this.insertBefore(this.draggedItem, target);
+        }
+      }
+
+      onTouchEnd() {
+        if (this.draggedItem) {
+          this.draggedItem.style.transform = "";
+          this.reset();
+        }
+      }
+
+      reset() {
+        if (this.draggedItem) {
+          this.draggedItem.classList.remove("dragging");
+          this.draggedItem = null;
+        }
+      }
+    }
+
+    customElements.define("sortable-list", SortableList);
+  </script>
+</body>
+</html>
