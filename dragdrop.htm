@@ -2,10 +2,9 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <title>Sortierbare Liste mit Desktop und Mobile Support</title>
+  <title>Sortierbare Liste mit präzisem Touch-Support</title>
 </head>
 <body>
-  <!-- Sortable List -->
   <sortable-list>
     <div>Element 1</div>
     <div>Element 2</div>
@@ -15,10 +14,10 @@
 
   <script>
     class SortableList extends HTMLElement {
-      items = [];        // Liste der Elemente
-      draggedItem = null; // Aktuelles Element bei Drag oder Touch
-      startY = 0;        // Startposition des Touches
-      offsetY = 0;       // Offset für die visuelle Bewegung
+      items = [];
+      draggedItem = null;
+      startY = 0;
+      offsetY = 0;
 
       constructor() {
         super();
@@ -54,23 +53,26 @@
           </style>
           <slot></slot>
         `;
+        this.addEventListeners();
+      }
 
+      addEventListeners() {
         this.items.forEach((item) => {
-          item.draggable = true; // Für Desktop-Drag-and-Drop
+          item.draggable = true;
 
-          // Desktop-Events
+          // Desktop Events
           item.addEventListener("dragstart", () => this.onDragStart(item));
           item.addEventListener("dragover", (e) => e.preventDefault());
           item.addEventListener("drop", () => this.onDrop(item));
 
-          // Touch-Events für Mobile Geräte
+          // Touch Events
           item.addEventListener("touchstart", (e) => this.onTouchStart(e, item));
           item.addEventListener("touchmove", (e) => this.onTouchMove(e));
           item.addEventListener("touchend", () => this.onTouchEnd());
         });
       }
 
-      /** Desktop-Drag-and-Drop */
+      /** Desktop Events */
       onDragStart(item) {
         this.draggedItem = item;
         item.classList.add("dragging");
@@ -78,7 +80,6 @@
 
       onDrop(target) {
         if (this.draggedItem && this.draggedItem !== target) {
-          // Tausche die Position der Elemente
           const draggedIndex = this.items.indexOf(this.draggedItem);
           const targetIndex = this.items.indexOf(target);
 
@@ -90,36 +91,35 @@
         this.reset();
       }
 
-      /** Touch-Events */
+      /** Touch Events */
       onTouchStart(event, item) {
         this.draggedItem = item;
         this.startY = event.touches[0].clientY;
         this.offsetY = 0;
         item.classList.add("dragging");
-        event.preventDefault();
       }
 
       onTouchMove(event) {
         if (!this.draggedItem) return;
 
         const currentY = event.touches[0].clientY;
-        this.offsetY = currentY - this.startY;
+        const deltaY = currentY - this.startY;
 
-        // Visuelles Bewegen des Elements
-        this.draggedItem.style.transform = `translateY(${this.offsetY}px)`;
+        if (Math.abs(deltaY) > 2) { // Threshold, um minimale Bewegungen zu ignorieren
+          this.offsetY = deltaY;
+          this.draggedItem.style.transform = `translateY(${this.offsetY}px)`;
 
-        // Ziel-Element unter dem Finger erkennen
-        const target = document.elementFromPoint(event.touches[0].clientX, currentY);
-        if (target && target !== this.draggedItem && this.contains(target)) {
-          const targetIndex = this.items.indexOf(target);
-          const draggedIndex = this.items.indexOf(this.draggedItem);
+          const target = document.elementFromPoint(event.touches[0].clientX, currentY);
+          if (target && target !== this.draggedItem && this.contains(target)) {
+            const targetIndex = this.items.indexOf(target);
+            const draggedIndex = this.items.indexOf(this.draggedItem);
 
-          if (targetIndex !== -1 && draggedIndex !== targetIndex) {
-            [this.items[draggedIndex], this.items[targetIndex]] =
-              [this.items[targetIndex], this.items[draggedIndex]];
-
-            this.reorderItems();
-            this.startY = currentY; // Aktualisiere die Startposition
+            if (targetIndex !== -1 && draggedIndex !== targetIndex) {
+              [this.items[draggedIndex], this.items[targetIndex]] =
+                [this.items[targetIndex], this.items[draggedIndex]];
+              this.reorderItems();
+              this.startY = currentY; // Neue Position als Start festlegen
+            }
           }
         }
       }
@@ -131,7 +131,6 @@
         }
       }
 
-      /** Aktualisiere die Reihenfolge der Elemente im DOM */
       reorderItems() {
         this.items.forEach((item) => this.appendChild(item));
       }
