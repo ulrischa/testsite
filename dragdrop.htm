@@ -2,11 +2,10 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <title>Sortierbare Liste mit Touch- und Drag-Support</title>
-  <style>
-    body {background-color: #0056b3;}
+  <title>Sortierbare Liste mit Desktop und Mobile Support</title>
 </head>
 <body>
+  <!-- Sortable List -->
   <sortable-list>
     <div>Element 1</div>
     <div>Element 2</div>
@@ -16,8 +15,10 @@
 
   <script>
     class SortableList extends HTMLElement {
-      items = [];
-      draggedItem = null;
+      items = [];        // Liste der Elemente
+      draggedItem = null; // Aktuelles Element bei Drag oder Touch
+      startY = 0;        // Startposition des Touches
+      offsetY = 0;       // Offset für die visuelle Bewegung
 
       constructor() {
         super();
@@ -44,30 +45,32 @@
               border-radius: 4px;
               cursor: move;
               user-select: none;
-              transition: transform 0.2s ease;
+              transition: transform 0.1s ease;
             }
             .dragging {
-              opacity: 0.5;
+              opacity: 0.7;
+              z-index: 1000;
             }
           </style>
           <slot></slot>
         `;
 
         this.items.forEach((item) => {
-          item.draggable = true;
+          item.draggable = true; // Für Desktop-Drag-and-Drop
 
-          // Desktop Events
+          // Desktop-Events
           item.addEventListener("dragstart", () => this.onDragStart(item));
           item.addEventListener("dragover", (e) => e.preventDefault());
           item.addEventListener("drop", () => this.onDrop(item));
 
-          // Touch Events
+          // Touch-Events für Mobile Geräte
           item.addEventListener("touchstart", (e) => this.onTouchStart(e, item));
           item.addEventListener("touchmove", (e) => this.onTouchMove(e));
           item.addEventListener("touchend", () => this.onTouchEnd());
         });
       }
 
+      /** Desktop-Drag-and-Drop */
       onDragStart(item) {
         this.draggedItem = item;
         item.classList.add("dragging");
@@ -75,29 +78,49 @@
 
       onDrop(target) {
         if (this.draggedItem && this.draggedItem !== target) {
-          this.insertBefore(this.draggedItem, target);
+          // Tausche die Position der Elemente
+          const draggedIndex = this.items.indexOf(this.draggedItem);
+          const targetIndex = this.items.indexOf(target);
+
+          [this.items[draggedIndex], this.items[targetIndex]] =
+            [this.items[targetIndex], this.items[draggedIndex]];
+
+          this.reorderItems();
         }
         this.reset();
       }
 
+      /** Touch-Events */
       onTouchStart(event, item) {
         this.draggedItem = item;
-        item.classList.add("dragging");
         this.startY = event.touches[0].clientY;
+        this.offsetY = 0;
+        item.classList.add("dragging");
+        event.preventDefault();
       }
 
       onTouchMove(event) {
         if (!this.draggedItem) return;
 
         const currentY = event.touches[0].clientY;
-        const deltaY = currentY - this.startY;
+        this.offsetY = currentY - this.startY;
 
-        this.draggedItem.style.transform = `translateY(${deltaY}px)`;
+        // Visuelles Bewegen des Elements
+        this.draggedItem.style.transform = `translateY(${this.offsetY}px)`;
 
-        // Erkennen des Ziel-Elements
+        // Ziel-Element unter dem Finger erkennen
         const target = document.elementFromPoint(event.touches[0].clientX, currentY);
         if (target && target !== this.draggedItem && this.contains(target)) {
-          this.insertBefore(this.draggedItem, target);
+          const targetIndex = this.items.indexOf(target);
+          const draggedIndex = this.items.indexOf(this.draggedItem);
+
+          if (targetIndex !== -1 && draggedIndex !== targetIndex) {
+            [this.items[draggedIndex], this.items[targetIndex]] =
+              [this.items[targetIndex], this.items[draggedIndex]];
+
+            this.reorderItems();
+            this.startY = currentY; // Aktualisiere die Startposition
+          }
         }
       }
 
@@ -106,6 +129,11 @@
           this.draggedItem.style.transform = "";
           this.reset();
         }
+      }
+
+      /** Aktualisiere die Reihenfolge der Elemente im DOM */
+      reorderItems() {
+        this.items.forEach((item) => this.appendChild(item));
       }
 
       reset() {
