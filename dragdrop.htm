@@ -22,11 +22,11 @@
 
   <script>
     class SortableList extends HTMLElement {
-      items = [];
-      draggedIndex = null;
-      placeholderIndex = null;
-      floatingElement = null;
-      startY = 0;
+      items = [];             // Datenquelle
+      draggedIndex = null;    // Index des gezogenen Elements
+      placeholderIndex = null;// Index der Zielposition
+      floatingElement = null; // Schwebendes Element
+      startY = 0;             // Startposition der Bewegung
 
       constructor() {
         super();
@@ -38,12 +38,10 @@
         this.render();
       }
 
-      /** Datenquelle initialisieren */
       initializeItems() {
         this.items = Array.from(this.children).map(child => child.outerHTML.trim());
       }
 
-      /** Liste rendern */
       render() {
         this.shadowRoot.innerHTML = `
           <style>
@@ -55,6 +53,7 @@
               border-radius: 4px;
               cursor: grab;
               user-select: none;
+              transition: box-shadow 0.2s ease;
             }
             .placeholder {
               height: 10px;
@@ -63,12 +62,14 @@
               border-radius: 4px;
             }
             .floating {
-              position: absolute;
+              position: fixed;
               z-index: 1000;
               pointer-events: none;
-              background: #f9f9f9;
-              border: 2px solid #3498db;
-              box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+              background: white;
+              box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+              padding: 10px;
+              border: 1px solid #3498db;
+              border-radius: 4px;
             }
           </style>
           ${this.items.map((content, index) => `
@@ -80,96 +81,83 @@
         this.addEventListeners();
       }
 
-      /** Event-Handler hinzufügen */
       addEventListeners() {
         const items = this.shadowRoot.querySelectorAll('.item');
         items.forEach(item => {
           item.addEventListener('dragstart', (e) => this.onDragStart(e, item));
           item.addEventListener('dragover', (e) => this.onDragOver(e, item));
           item.addEventListener('drop', () => this.onDrop());
-
           item.addEventListener('touchstart', (e) => this.onTouchStart(e, item), { passive: false });
           item.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
           item.addEventListener('touchend', () => this.onTouchEnd());
         });
       }
 
-      /** Drag Start */
       onDragStart(event, item) {
         this.draggedIndex = parseInt(item.dataset.index);
-        this.createFloatingElement(item);
+        this.createFloatingElement(item, event.clientX, event.clientY);
       }
 
-      /** Drag Over */
       onDragOver(event, item) {
         event.preventDefault();
-        const targetIndex = parseInt(item.dataset.index);
-        if (this.placeholderIndex !== targetIndex) {
-          this.placeholderIndex = targetIndex;
-          this.render();
-        }
+        this.updatePlaceholder(event.clientY);
       }
 
-      /** Drop: Aktualisiere Reihenfolge */
       onDrop() {
-        this.updateOrder(this.placeholderIndex);
+        this.updateOrder();
       }
 
-      /** Touch Start */
       onTouchStart(event, item) {
         event.preventDefault();
         this.draggedIndex = parseInt(item.dataset.index);
         this.startY = event.touches[0].clientY;
-        this.createFloatingElement(item);
+        this.createFloatingElement(item, event.touches[0].clientX, event.touches[0].clientY);
       }
 
-      /** Touch Move */
       onTouchMove(event) {
         event.preventDefault();
-        const deltaY = event.touches[0].clientY - this.startY;
+        this.moveFloatingElement(event.touches[0].clientX, event.touches[0].clientY);
+        this.updatePlaceholder(event.touches[0].clientY);
+      }
 
-        if (this.floatingElement) {
-          this.floatingElement.style.transform = `translateY(${deltaY}px)`;
-        }
+      onTouchEnd() {
+        this.updateOrder();
+      }
 
-        const items = Array.from(this.shadowRoot.querySelectorAll('.item'));
-        items.forEach((el, index) => {
-          const rect = el.getBoundingClientRect();
-          if (event.touches[0].clientY > rect.top && event.touches[0].clientY < rect.bottom) {
-            this.placeholderIndex = index;
-          }
-        });
-
+      createFloatingElement(item, x, y) {
+        this.floatingElement = document.createElement('div');
+        this.floatingElement.classList.add('floating');
+        this.floatingElement.textContent = item.textContent;
+        this.floatingElement.style.left = `${x}px`;
+        this.floatingElement.style.top = `${y}px`;
+        document.body.appendChild(this.floatingElement);
+        this.placeholderIndex = this.draggedIndex;
         this.render();
       }
 
-      /** Touch End */
-      onTouchEnd() {
-        this.updateOrder(this.placeholderIndex);
+      moveFloatingElement(x, y) {
+        this.floatingElement.style.left = `${x}px`;
+        this.floatingElement.style.top = `${y}px`;
       }
 
-      /** Erstelle das schwebende Element */
-      createFloatingElement(item) {
-        this.floatingElement = item.cloneNode(true);
-        this.floatingElement.classList.add('floating');
-        this.floatingElement.style.left = `${item.getBoundingClientRect().left}px`;
-        this.floatingElement.style.top = `${item.getBoundingClientRect().top}px`;
-        this.floatingElement.style.width = `${item.offsetWidth}px`;
-        document.body.appendChild(this.floatingElement);
+      updatePlaceholder(clientY) {
+        const items = this.shadowRoot.querySelectorAll('.item');
+        items.forEach((el, index) => {
+          const rect = el.getBoundingClientRect();
+          if (clientY > rect.top && clientY < rect.bottom) {
+            this.placeholderIndex = index;
+          }
+        });
+        this.render();
       }
 
-      /** Reihenfolge aktualisieren */
-      updateOrder(targetIndex) {
-        if (this.draggedIndex !== null && targetIndex !== null) {
-          const [movedItem] = this.items.splice(this.draggedIndex, 1);
-          this.items.splice(targetIndex, 0, movedItem);
-        }
+      updateOrder() {
+        const [movedItem] = this.items.splice(this.draggedIndex, 1);
+        this.items.splice(this.placeholderIndex, 0, movedItem);
         this.draggedIndex = null;
         this.placeholderIndex = null;
-        if (this.floatingElement) {
-          document.body.removeChild(this.floatingElement);
-          this.floatingElement = null;
-        }
+        document.body.removeChild(this.floatingElement);
+        this.floatingElement = null;
         this.render();
       }
     }
