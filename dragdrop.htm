@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <title>Datengetriebenes Drag-and-Drop für Mobile und Desktop</title>
+  <title>Datengetriebenes Drag-and-Drop für Desktop und Mobile</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -15,13 +15,14 @@
     <div>Element 2</div>
     <div>Element 3</div>
     <div>Element 4</div>
+    <div>Element 5</div>
   </sortable-list>
 
   <script>
     class SortableList extends HTMLElement {
-      items = [];       // Datenquelle: enthält die Reihenfolge der Elemente
-      draggedIndex = null; // Index des aktuell gezogenen Elements
-      startY = 0;       // Startposition bei Touch
+      items = [];
+      draggedIndex = null;
+      startY = 0;
 
       constructor() {
         super();
@@ -33,7 +34,7 @@
         this.render();
       }
 
-      /** Initialisiere die Datenquelle mit den Slotted Inhalten */
+      /** Initialisiere die Datenquelle */
       initializeItems() {
         this.items = Array.from(this.children).map((child) => child.outerHTML.trim());
       }
@@ -54,6 +55,8 @@
             }
             .dragging {
               opacity: 0.7;
+              position: relative;
+              z-index: 1000;
             }
           </style>
           ${this.items.map((content, index) => `
@@ -62,64 +65,83 @@
             </div>
           `).join('')}
         `;
-
         this.addEventListeners();
       }
 
       /** Fügt Drag-and-Drop und Touch-Event-Handler hinzu */
       addEventListeners() {
         const items = this.shadowRoot.querySelectorAll('.item');
-
         items.forEach((item) => {
-          // Desktop Drag-and-Drop Events
           item.addEventListener('dragstart', (e) => this.onDragStart(e, item));
           item.addEventListener('dragover', (e) => e.preventDefault());
           item.addEventListener('drop', (e) => this.onDrop(e, item));
 
           // Touch Events
-          item.addEventListener('touchstart', (e) => this.onTouchStart(e, item));
-          item.addEventListener('touchmove', (e) => this.onTouchMove(e, item));
+          item.addEventListener('touchstart', (e) => this.onTouchStart(e, item), { passive: false });
+          item.addEventListener('touchmove', (e) => this.onTouchMove(e, item), { passive: false });
           item.addEventListener('touchend', () => this.onTouchEnd());
         });
       }
 
-      /** Dragstart: Speichert den Index des gezogenen Elements */
+      /** Start Drag: Speichere den Index */
       onDragStart(event, item) {
         this.draggedIndex = parseInt(item.dataset.index);
         item.classList.add('dragging');
       }
 
-      /** Drop: Aktualisiert die Reihenfolge in der Datenquelle */
+      /** Drop: Tausche die Reihenfolge */
       onDrop(event, targetItem) {
         const targetIndex = parseInt(targetItem.dataset.index);
         this.swapItems(this.draggedIndex, targetIndex);
         this.render();
       }
 
-      /** Touchstart: Speichert den Startpunkt */
+      /** Touch Start: Beginne den Zug */
       onTouchStart(event, item) {
+        event.preventDefault(); // Verhindert das Scrollen
         this.draggedIndex = parseInt(item.dataset.index);
         this.startY = event.touches[0].clientY;
         item.classList.add('dragging');
       }
 
-      /** Touchmove: Simuliert die visuelle Bewegung */
+      /** Touch Move: Bewege das Element visuell */
       onTouchMove(event, item) {
+        event.preventDefault(); // Verhindert das Scrollen
         const deltaY = event.touches[0].clientY - this.startY;
         item.style.transform = `translate3d(0, ${deltaY}px, 0)`;
-      }
 
-      /** Touchend: Aktualisiert die Reihenfolge */
-      onTouchEnd() {
-        this.items = this.items.sort((a, b) => {
-          return a.includes('dragging') ? 1 : -1;
+        // Überprüfe, ob das Element die Mitte eines anderen Elements erreicht hat
+        const items = Array.from(this.shadowRoot.querySelectorAll('.item'));
+        const currentIndex = this.draggedIndex;
+
+        items.forEach((el, index) => {
+          const rect = el.getBoundingClientRect();
+          const middle = rect.top + rect.height / 2;
+          const touchY = event.touches[0].clientY;
+
+          if (index !== currentIndex && touchY > middle) {
+            this.swapItems(currentIndex, index);
+            this.startY = event.touches[0].clientY; // Update Startpunkt
+            this.render();
+          }
         });
-        this.render();
       }
 
-      /** Tauscht zwei Elemente in der Datenquelle */
+      /** Touch End: Finalisiere die Bewegung */
+      onTouchEnd() {
+        const draggedItem = this.shadowRoot.querySelector('.dragging');
+        if (draggedItem) {
+          draggedItem.style.transform = '';
+          draggedItem.classList.remove('dragging');
+        }
+        this.draggedIndex = null;
+      }
+
+      /** Tausche zwei Items in der Datenquelle */
       swapItems(fromIndex, toIndex) {
-        [this.items[fromIndex], this.items[toIndex]] = [this.items[toIndex], this.items[fromIndex]];
+        const temp = this.items[fromIndex];
+        this.items[fromIndex] = this.items[toIndex];
+        this.items[toIndex] = temp;
       }
     }
 
