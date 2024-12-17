@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <title>Drag-and-Drop mit Platzhalter-Markierung</title>
+  <title>Drag-and-Drop mit Platzhalter</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -22,11 +22,11 @@
 
   <script>
     class SortableList extends HTMLElement {
-      items = [];         // Datenquelle
+      items = []; // Datenquelle
       draggedIndex = null; // Index des gezogenen Elements
-      placeholderIndex = null; // Zielposition
-      startY = 0;         // Startposition der Fingerbewegung
-      currentY = 0;       // Aktuelle Fingerposition
+      placeholderIndex = null; // Index für Zielposition
+      startY = 0; // Startposition des Touch
+      currentY = 0;
 
       constructor() {
         super();
@@ -38,12 +38,12 @@
         this.render();
       }
 
-      /** Initialisiere die Datenquelle */
+      /** Initialisiere Datenquelle */
       initializeItems() {
-        this.items = Array.from(this.children).map((child) => child.outerHTML.trim());
+        this.items = Array.from(this.children).map(child => child.outerHTML.trim());
       }
 
-      /** Rendert die Liste basierend auf der Datenquelle */
+      /** Liste rendern */
       render() {
         this.shadowRoot.innerHTML = `
           <style>
@@ -55,53 +55,51 @@
               border-radius: 4px;
               cursor: grab;
               user-select: none;
-              transition: transform 0.1s ease, box-shadow 0.1s ease;
+              transition: transform 0.1s ease;
             }
             .dragging {
-              opacity: 0.7;
-              z-index: 1000;
+              opacity: 0.5;
               cursor: grabbing;
-              box-shadow: 0 4px 6px rgba(0,0,0,0.2);
             }
             .placeholder {
               height: 10px;
               background-color: #3498db;
-              border-radius: 4px;
               margin: 4px 0;
-              transition: background-color 0.2s ease;
+              border-radius: 4px;
             }
           </style>
           ${this.items.map((content, index) => `
-            <div class="item" draggable="true" data-index="${index}">
-              ${content}
-            </div>
+            ${index === this.placeholderIndex ? `<div class="placeholder"></div>` : ''}
+            <div class="item" draggable="true" data-index="${index}">${content}</div>
           `).join('')}
-          ${this.placeholderIndex !== null ? `<div class="placeholder"></div>` : ''}
+          ${this.placeholderIndex === this.items.length ? `<div class="placeholder"></div>` : ''}
         `;
         this.addEventListeners();
       }
 
-      /** Fügt Event-Handler hinzu */
+      /** Event-Handler hinzufügen */
       addEventListeners() {
         const items = this.shadowRoot.querySelectorAll('.item');
-        items.forEach((item) => {
+        items.forEach(item => {
+          // Drag-and-Drop Events (Desktop)
           item.addEventListener('dragstart', (e) => this.onDragStart(e, item));
           item.addEventListener('dragover', (e) => this.onDragOver(e, item));
-          item.addEventListener('drop', (e) => this.onDrop(e, item));
+          item.addEventListener('drop', () => this.onDrop());
 
+          // Touch Events (Mobile)
           item.addEventListener('touchstart', (e) => this.onTouchStart(e, item), { passive: false });
-          item.addEventListener('touchmove', (e) => this.onTouchMove(e, item), { passive: false });
+          item.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
           item.addEventListener('touchend', () => this.onTouchEnd());
         });
       }
 
-      /** Drag-Start */
+      /** Drag Start */
       onDragStart(event, item) {
         this.draggedIndex = parseInt(item.dataset.index);
         item.classList.add('dragging');
       }
 
-      /** Drag-Over: Zielposition berechnen */
+      /** Drag Over */
       onDragOver(event, item) {
         event.preventDefault();
         const targetIndex = parseInt(item.dataset.index);
@@ -111,13 +109,12 @@
         }
       }
 
-      /** Drop: Reihenfolge aktualisieren */
-      onDrop(event, item) {
-        const targetIndex = parseInt(item.dataset.index);
-        this.updateOrder(targetIndex);
+      /** Drop: Sortierung aktualisieren */
+      onDrop() {
+        this.updateOrder(this.placeholderIndex);
       }
 
-      /** Touch-Start */
+      /** Touch Start */
       onTouchStart(event, item) {
         event.preventDefault();
         this.draggedIndex = parseInt(item.dataset.index);
@@ -125,19 +122,15 @@
         item.classList.add('dragging');
       }
 
-      /** Touch-Move: Zielposition berechnen */
-      onTouchMove(event, item) {
+      /** Touch Move: Zielposition berechnen */
+      onTouchMove(event) {
         event.preventDefault();
-        const deltaY = event.touches[0].clientY - this.startY;
-        item.style.transform = `translateY(${deltaY}px)`;
+        this.currentY = event.touches[0].clientY;
 
         const items = Array.from(this.shadowRoot.querySelectorAll('.item'));
         items.forEach((el, index) => {
           const rect = el.getBoundingClientRect();
-          const middle = rect.top + rect.height / 2;
-          if (event.touches[0].clientY > middle) {
-            this.placeholderIndex = index + 1;
-          } else if (event.touches[0].clientY < middle) {
+          if (this.currentY > rect.top && this.currentY < rect.bottom) {
             this.placeholderIndex = index;
           }
         });
@@ -145,22 +138,20 @@
         this.render();
       }
 
-      /** Touch-End: Finalisiere Reihenfolge */
+      /** Touch End */
       onTouchEnd() {
-        if (this.placeholderIndex !== null) {
-          this.updateOrder(this.placeholderIndex);
-        }
+        this.updateOrder(this.placeholderIndex);
       }
 
-      /** Aktualisiere die Reihenfolge in der Datenquelle */
+      /** Reihenfolge aktualisieren */
       updateOrder(targetIndex) {
-        if (this.draggedIndex !== null && targetIndex !== null && this.draggedIndex !== targetIndex) {
+        if (this.draggedIndex !== null && targetIndex !== null) {
           const [movedItem] = this.items.splice(this.draggedIndex, 1);
           this.items.splice(targetIndex, 0, movedItem);
+          this.draggedIndex = null;
+          this.placeholderIndex = null;
+          this.render();
         }
-        this.draggedIndex = null;
-        this.placeholderIndex = null;
-        this.render();
       }
     }
 
