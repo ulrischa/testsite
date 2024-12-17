@@ -1,142 +1,133 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sortable List Web Component</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 20px;
-      background-color: #f9f9f9;
-    }
-    h1 {
-      text-align: center;
-      font-size: 24px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drag-and-Drop Web Component</title>
+    <style>
+        .draggable-item {
+            padding: 10px;
+            margin: 5px;
+            border: 1px solid #ccc;
+            background-color: #f9f9f9;
+            cursor: move;
+        }
+        .dragging {
+            opacity: 0.5;
+        }
+        drag-sorter {
+            display: block;
+            width: 300px;
+        }
+    </style>
 </head>
 <body>
-  <h1>Drag & Drop Sortable List</h1>
+    <!-- Die benutzerdefinierte Webkomponente -->
+    <drag-sorter></drag-sorter>
 
-  <!-- Verwendung der Web Component -->
-  <sortable-list>
-    <div class="item">Element 1</div>
-    <div class="item">Element 2</div>
-    <div class="item">Element 3</div>
-    <div class="item">Element 4</div>
-    <div class="item">Element 5</div>
-  </sortable-list>
-
-  <script>
-    // Web Component Definition
-    class SortableList extends HTMLElement {
-      constructor() {
-        super();
-        this.attachShadow({ mode: "open" });
-        this.items = [];
-      }
-
-      connectedCallback() {
-        this.initTemplate();
-        this.collectItems();
-        this.render();
-        this.addDragAndDrop();
-      }
-
-      initTemplate() {
-        const template = document.createElement("template");
-        template.innerHTML = `
-          <style>
-            ::slotted(.item) {
-              padding: 10px;
-              margin: 5px;
-              background-color: #f0f0f0;
-              border: 1px solid #ddd;
-              border-radius: 4px;
-              cursor: move;
-              user-select: none;
-              transition: background 0.2s, transform 0.2s;
+    <script>
+        class DragSorter extends HTMLElement {
+            constructor() {
+                super();
+                this.attachShadow({ mode: "open" });
+                this.data = ["Item 1", "Item 2", "Item 3", "Item 4"];
+                this.draggedIndex = null;
+                this.render();
             }
 
-            ::slotted(.item.dragging) {
-              background-color: #d0e4ff;
-              opacity: 0.7;
-              transform: scale(1.05);
+            connectedCallback() {
+                this.addEventListeners();
+                this.applyMobilePolyfill();
             }
-          </style>
-          <slot></slot>
-        `;
-        this.shadowRoot.appendChild(template.content.cloneNode(true));
-      }
 
-      collectItems() {
-        const slot = this.shadowRoot.querySelector("slot");
-        this.items = Array.from(slot.assignedElements()).filter((el) =>
-          el.classList.contains("item")
-        );
-      }
-
-      render() {
-        this.items.forEach((item, index) => {
-          item.dataset.index = index; // Datenbindung
-        });
-      }
-
-      addDragAndDrop() {
-        let draggedItem = null;
-
-        this.items.forEach((item) => {
-          item.draggable = true;
-
-          item.addEventListener("dragstart", (e) => {
-            draggedItem = item;
-            item.classList.add("dragging");
-            e.dataTransfer.effectAllowed = "move";
-          });
-
-          item.addEventListener("dragover", (e) => {
-            e.preventDefault();
-            const target = e.target;
-            if (target && target !== draggedItem && target.classList.contains("item")) {
-              const draggedIndex = parseInt(draggedItem.dataset.index, 10);
-              const targetIndex = parseInt(target.dataset.index, 10);
-
-              if (draggedIndex < targetIndex) {
-                target.after(draggedItem);
-              } else {
-                target.before(draggedItem);
-              }
-
-              this.updateData();
+            render() {
+                this.shadowRoot.innerHTML = `
+                    <div id="container">
+                        ${this.data.map((item, index) => `
+                            <div class="draggable-item" draggable="true" data-index="${index}">
+                                ${item}
+                            </div>
+                        `).join("")}
+                    </div>
+                `;
             }
-          });
 
-          item.addEventListener("dragend", () => {
-            draggedItem.classList.remove("dragging");
-            draggedItem = null;
-          });
-        });
-      }
+            addEventListeners() {
+                const container = this.shadowRoot.getElementById("container");
+                container.addEventListener("dragstart", (e) => this.onDragStart(e));
+                container.addEventListener("dragover", (e) => this.onDragOver(e));
+                container.addEventListener("drop", (e) => this.onDrop(e));
+                container.addEventListener("dragend", () => this.onDragEnd());
+            }
 
-      updateData() {
-        this.items = Array.from(this.querySelectorAll(".item"));
-        this.render();
-      }
-    }
+            onDragStart(event) {
+                this.draggedIndex = event.target.dataset.index;
+                event.target.classList.add("dragging");
+            }
 
-    customElements.define("sortable-list", SortableList);
+            onDragOver(event) {
+                event.preventDefault();
+                const target = event.target.closest('.draggable-item');
+                if (target && target.dataset.index !== this.draggedIndex) {
+                    const targetIndex = target.dataset.index;
+                    this.swapItems(this.draggedIndex, targetIndex);
+                    this.draggedIndex = targetIndex;
+                    this.render();
+                    this.addEventListeners();
+                }
+            }
 
-    // Polyfill für mobile Geräte (falls notwendig)
-    (function () {
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      if (isMobile) {
-        const script = document.createElement("script");
-        script.src = "https://cdn.jsdelivr.net/npm/mobile-drag-drop@latest/index.min.js";
-        script.onload = () => window.mobileDragDrop.polyfill();
-        document.head.appendChild(script);
-      }
-    })();
-  </script>
+            onDrop(event) {
+                event.preventDefault();
+            }
+
+            onDragEnd() {
+                this.shadowRoot.querySelectorAll(".draggable-item").forEach(el => el.classList.remove("dragging"));
+            }
+
+            swapItems(fromIndex, toIndex) {
+                const temp = this.data[fromIndex];
+                this.data[fromIndex] = this.data[toIndex];
+                this.data[toIndex] = temp;
+            }
+
+            applyMobilePolyfill() {
+                // Polyfill für Drag-and-Drop auf mobilen Geräten
+                let touchItem = null;
+
+                this.shadowRoot.addEventListener("touchstart", (e) => {
+                    touchItem = e.target.closest(".draggable-item");
+                    if (touchItem) {
+                        touchItem.classList.add("dragging");
+                        this.draggedIndex = touchItem.dataset.index;
+                    }
+                });
+
+                this.shadowRoot.addEventListener("touchmove", (e) => {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    const target = document.elementFromPoint(touch.clientX, touch.clientY)?.closest(".draggable-item");
+
+                    if (target && target !== touchItem) {
+                        const targetIndex = target.dataset.index;
+                        this.swapItems(this.draggedIndex, targetIndex);
+                        this.draggedIndex = targetIndex;
+                        this.render();
+                        this.addEventListeners();
+                        touchItem = this.shadowRoot.querySelector(`[data-index="${targetIndex}"]`);
+                        touchItem.classList.add("dragging");
+                    }
+                });
+
+                this.shadowRoot.addEventListener("touchend", () => {
+                    this.shadowRoot.querySelectorAll(".draggable-item").forEach(el => el.classList.remove("dragging"));
+                    touchItem = null;
+                });
+            }
+        }
+
+        // Definieren der neuen Webkomponente
+        customElements.define("drag-sorter", DragSorter);
+    </script>
 </body>
 </html>
