@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <title>Funktionierendes Drag-and-Drop</title>
+  <title>Flüssiges Drag-and-Drop</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -24,7 +24,8 @@
     class SortableList extends HTMLElement {
       items = [];         // Datenquelle
       draggedIndex = null; // Index des gezogenen Elements
-      placeholderIndex = null; // Index für Zielposition
+      placeholderIndex = null; // Zielposition
+      startY = 0;         // Startposition der Fingerbewegung
       currentY = 0;       // Aktuelle Fingerposition
 
       constructor() {
@@ -53,8 +54,8 @@
               border: 1px solid #ccc;
               border-radius: 4px;
               cursor: grab;
-              transition: transform 0.1s ease, box-shadow 0.1s ease;
               user-select: none;
+              transition: transform 0.1s ease, box-shadow 0.1s ease;
             }
             .dragging {
               opacity: 0.7;
@@ -76,19 +77,17 @@
       addEventListeners() {
         const items = this.shadowRoot.querySelectorAll('.item');
         items.forEach((item) => {
-          // Desktop-Events
           item.addEventListener('dragstart', (e) => this.onDragStart(e, item));
           item.addEventListener('dragover', (e) => e.preventDefault());
           item.addEventListener('drop', (e) => this.onDrop(e, item));
 
-          // Touch-Events
           item.addEventListener('touchstart', (e) => this.onTouchStart(e, item), { passive: false });
           item.addEventListener('touchmove', (e) => this.onTouchMove(e, item), { passive: false });
           item.addEventListener('touchend', () => this.onTouchEnd());
         });
       }
 
-      /** Drag-Start: Speichere den Index */
+      /** Drag-Start */
       onDragStart(event, item) {
         this.draggedIndex = parseInt(item.dataset.index);
         item.classList.add('dragging');
@@ -100,34 +99,42 @@
         this.updateOrder(targetIndex);
       }
 
-      /** Touch-Start: Startposition speichern */
+      /** Touch-Start */
       onTouchStart(event, item) {
         event.preventDefault();
         this.draggedIndex = parseInt(item.dataset.index);
-        this.currentY = event.touches[0].clientY;
+        this.startY = event.touches[0].clientY;
         item.classList.add('dragging');
       }
 
-      /** Touch-Move: Bewege das Element visuell */
+      /** Touch-Move: Berechne Zielposition */
       onTouchMove(event, item) {
         event.preventDefault();
-        const deltaY = event.touches[0].clientY - this.currentY;
+        const deltaY = event.touches[0].clientY - this.startY;
         item.style.transform = `translateY(${deltaY}px)`;
 
-        // Berechne die neue Zielposition
         const items = Array.from(this.shadowRoot.querySelectorAll('.item'));
         items.forEach((el, index) => {
           const rect = el.getBoundingClientRect();
           const middle = rect.top + rect.height / 2;
-          if (event.touches[0].clientY > middle) {
-            this.placeholderIndex = index;
+
+          if (index !== this.draggedIndex) {
+            if (event.touches[0].clientY > middle && this.currentY <= middle) {
+              this.placeholderIndex = index;
+            } else if (event.touches[0].clientY < middle && this.currentY >= middle) {
+              this.placeholderIndex = index;
+            }
           }
         });
+
+        this.currentY = event.touches[0].clientY;
       }
 
-      /** Touch-End: Reihenfolge finalisieren */
+      /** Touch-End: Finalisiere die neue Reihenfolge */
       onTouchEnd() {
-        this.updateOrder(this.placeholderIndex);
+        if (this.placeholderIndex !== null) {
+          this.updateOrder(this.placeholderIndex);
+        }
       }
 
       /** Aktualisiere die Reihenfolge in der Datenquelle */
