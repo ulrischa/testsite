@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <title>Drag-and-Drop mit Platzhalter</title>
+  <title>Drag-and-Drop mit Einfügelinie</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -22,10 +22,10 @@
 
   <script>
     class SortableList extends HTMLElement {
-      items = [];             // Datenquelle
-      draggedIndex = null;    // Index des gezogenen Elements
-      placeholderIndex = null; // Index des Platzhalters
-      currentY = 0;           // Aktuelle Position der Finger/Mausbewegung
+      items = [];
+      draggedIndex = null;
+      placeholderIndex = null;
+      currentY = 0;
 
       constructor() {
         super();
@@ -37,47 +37,43 @@
         this.render();
       }
 
-      /** Initialisiere die Datenquelle */
       initializeItems() {
         this.items = Array.from(this.children).map((child) => child.outerHTML.trim());
       }
 
-      /** Rendert die Liste basierend auf der Datenquelle */
       render() {
         this.shadowRoot.innerHTML = `
           <style>
             .item {
               padding: 10px;
-              margin: 4px 0;
+              margin: 0;
               background: #f3f3f3;
               border: 1px solid #ccc;
               border-radius: 4px;
               cursor: grab;
               user-select: none;
+              position: relative;
             }
             .dragging {
               opacity: 0.5;
               cursor: grabbing;
             }
-            .placeholder {
-              height: 40px;
-              margin: 4px 0;
-              background: #e0e0e0;
-              border: 2px dashed #aaa;
-              border-radius: 4px;
+            .line {
+              height: 4px;
+              background: #0078ff;
+              position: relative;
+              margin: 0;
             }
           </style>
-          ${this.items.map((content, index) => {
-            if (index === this.placeholderIndex) {
-              return `<div class="placeholder"></div>`;
-            }
-            return `<div class="item" draggable="true" data-index="${index}">${content}</div>`;
-          }).join('')}
+          ${this.items.map((content, index) => `
+            ${index === this.placeholderIndex ? '<div class="line"></div>' : ''}
+            <div class="item" draggable="true" data-index="${index}">${content}</div>
+          `).join('')}
+          ${this.placeholderIndex === this.items.length ? '<div class="line"></div>' : ''}
         `;
         this.addEventListeners();
       }
 
-      /** Event-Handler hinzufügen */
       addEventListeners() {
         const items = this.shadowRoot.querySelectorAll('.item');
         items.forEach((item) => {
@@ -91,30 +87,24 @@
         });
       }
 
-      /** Drag Start */
       onDragStart(event, item) {
         this.draggedIndex = parseInt(item.dataset.index);
-        this.placeholderIndex = this.draggedIndex;
         item.classList.add('dragging');
-        this.render();
       }
 
-      /** Drag Over: Platzhalter aktualisieren */
       onDragOver(event, target) {
         event.preventDefault();
         const targetIndex = parseInt(target.dataset.index);
-        if (targetIndex !== this.placeholderIndex) {
+        if (this.placeholderIndex !== targetIndex) {
           this.placeholderIndex = targetIndex;
           this.render();
         }
       }
 
-      /** Drop: Aktualisiere Reihenfolge */
       onDrop() {
         this.updateOrder(this.placeholderIndex);
       }
 
-      /** Touch Start */
       onTouchStart(event, item) {
         event.preventDefault();
         this.draggedIndex = parseInt(item.dataset.index);
@@ -123,10 +113,8 @@
         item.classList.add('dragging');
       }
 
-      /** Touch Move: Aktualisiere Platzhalter */
       onTouchMove(event) {
         event.preventDefault();
-        const deltaY = event.touches[0].clientY - this.currentY;
         this.currentY = event.touches[0].clientY;
 
         const items = Array.from(this.shadowRoot.querySelectorAll('.item'));
@@ -134,18 +122,18 @@
           const rect = el.getBoundingClientRect();
           if (this.currentY > rect.top && this.currentY < rect.bottom) {
             this.placeholderIndex = index;
+          } else if (this.currentY > rect.bottom) {
+            this.placeholderIndex = index + 1;
           }
         });
 
         this.render();
       }
 
-      /** Touch End: Finalisiere Reihenfolge */
       onTouchEnd() {
         this.updateOrder(this.placeholderIndex);
       }
 
-      /** Aktualisiere die Reihenfolge in der Datenquelle */
       updateOrder(targetIndex) {
         if (this.draggedIndex !== null && targetIndex !== null) {
           const [movedItem] = this.items.splice(this.draggedIndex, 1);
