@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <title>Drag-and-Drop mit Platzhalter und Schwebendem Element</title>
+  <title>Drag-and-Drop mit Platzhalter und Floating-Element</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -22,11 +22,11 @@
 
   <script>
     class SortableList extends HTMLElement {
-      items = [];          // Datenquelle
+      items = [];         // Datenquelle
       draggedIndex = null; // Index des gezogenen Elements
       placeholderIndex = null; // Zielposition
       floatingElement = null; // Schwebendes Element
-      currentY = 0;
+      currentY = 0;       // Fingerposition
 
       constructor() {
         super();
@@ -43,7 +43,7 @@
         this.items = Array.from(this.children).map((child) => child.outerHTML.trim());
       }
 
-      /** Rendert die Liste */
+      /** Rendert die Liste basierend auf der Datenquelle */
       render() {
         this.shadowRoot.innerHTML = `
           <style>
@@ -58,7 +58,7 @@
               transition: box-shadow 0.2s ease;
             }
             .dragging {
-              opacity: 0;
+              visibility: hidden;
             }
             .placeholder {
               height: 40px;
@@ -87,22 +87,31 @@
         this.addEventListeners();
       }
 
-      /** Fügt Event-Handler hinzu */
+      /** Event-Handler hinzufügen */
       addEventListeners() {
         const items = this.shadowRoot.querySelectorAll('.item');
         items.forEach((item) => {
           item.addEventListener('dragstart', (e) => this.onDragStart(e, item));
           item.addEventListener('dragover', (e) => e.preventDefault());
-          item.addEventListener('drop', (e) => this.onDrop(e));
+          item.addEventListener('drop', () => this.finalizeMove());
 
           item.addEventListener('touchstart', (e) => this.onTouchStart(e, item), { passive: false });
           item.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
-          item.addEventListener('touchend', () => this.onTouchEnd());
+          item.addEventListener('touchend', () => this.finalizeMove());
         });
       }
 
-      /** Drag-Start */
+      /** Drag-Start und Touch-Start */
       onDragStart(event, item) {
+        this.startDrag(item);
+      }
+
+      onTouchStart(event, item) {
+        event.preventDefault();
+        this.startDrag(item);
+      }
+
+      startDrag(item) {
         this.draggedIndex = parseInt(item.dataset.index);
         this.placeholderIndex = this.draggedIndex;
         this.createFloatingElement(item);
@@ -110,49 +119,31 @@
         this.render();
       }
 
-      /** Drop */
-      onDrop(event) {
-        this.finalizeMove();
+      /** Floating-Element erstellen */
+      createFloatingElement(item) {
+        this.floatingElement = document.createElement('div');
+        this.floatingElement.innerHTML = item.innerHTML;
+        this.floatingElement.classList.add('floating');
+        this.updateFloatingElementPosition(event.touches?.[0]?.clientX || event.clientX,
+                                           event.touches?.[0]?.clientY || event.clientY);
+        document.body.appendChild(this.floatingElement);
       }
 
-      /** Touch-Start */
-      onTouchStart(event, item) {
-        event.preventDefault();
-        this.draggedIndex = parseInt(item.dataset.index);
-        this.placeholderIndex = this.draggedIndex;
-        this.createFloatingElement(item);
-        item.classList.add('dragging');
-      }
-
-      /** Touch-Move */
+      /** Floating-Element bewegen */
       onTouchMove(event) {
         event.preventDefault();
         this.updateFloatingElementPosition(event.touches[0].clientX, event.touches[0].clientY);
         this.updatePlaceholder(event.touches[0].clientY);
       }
 
-      /** Touch-End */
-      onTouchEnd() {
-        this.finalizeMove();
-      }
-
-      /** Erstelle das schwebende Element */
-      createFloatingElement(item) {
-        this.floatingElement = document.createElement('div');
-        this.floatingElement.innerHTML = item.innerHTML;
-        this.floatingElement.classList.add('floating');
-        document.body.appendChild(this.floatingElement);
-      }
-
-      /** Aktualisiere die Position des schwebenden Elements */
       updateFloatingElementPosition(x, y) {
         if (this.floatingElement) {
-          this.floatingElement.style.left = `${x}px`;
-          this.floatingElement.style.top = `${y}px`;
+          this.floatingElement.style.left = `${x - 50}px`;
+          this.floatingElement.style.top = `${y - 20}px`;
         }
       }
 
-      /** Aktualisiere die Zielposition */
+      /** Placeholder-Position aktualisieren */
       updatePlaceholder(currentY) {
         const items = Array.from(this.shadowRoot.querySelectorAll('.item'));
         items.forEach((el, index) => {
