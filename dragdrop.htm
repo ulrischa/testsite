@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <title>Datengetriebenes Drag-and-Drop</title>
+  <title>Funktionierendes Drag-and-Drop</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -12,7 +12,6 @@
   </style>
 </head>
 <body>
-  <!-- Sortable List -->
   <sortable-list>
     <div>Element 1</div>
     <div>Element 2</div>
@@ -25,6 +24,7 @@
     class SortableList extends HTMLElement {
       items = [];         // Datenquelle
       draggedIndex = null; // Index des gezogenen Elements
+      placeholderIndex = null; // Index für Zielposition
       currentY = 0;       // Aktuelle Fingerposition
 
       constructor() {
@@ -113,34 +113,32 @@
         event.preventDefault();
         const deltaY = event.touches[0].clientY - this.currentY;
         item.style.transform = `translateY(${deltaY}px)`;
-      }
 
-      /** Touch-End: Zielposition berechnen und aktualisieren */
-      onTouchEnd() {
-        const draggedItem = this.shadowRoot.querySelector('.dragging');
+        // Berechne die neue Zielposition
         const items = Array.from(this.shadowRoot.querySelectorAll('.item'));
-        let targetIndex = this.draggedIndex;
-
-        // Bestimme das nächste Ziel basierend auf der Mitte der anderen Elemente
         items.forEach((el, index) => {
           const rect = el.getBoundingClientRect();
           const middle = rect.top + rect.height / 2;
-          if (this.currentY > middle) {
-            targetIndex = index;
+          if (event.touches[0].clientY > middle) {
+            this.placeholderIndex = index;
           }
         });
+      }
 
-        this.updateOrder(targetIndex);
+      /** Touch-End: Reihenfolge finalisieren */
+      onTouchEnd() {
+        this.updateOrder(this.placeholderIndex);
       }
 
       /** Aktualisiere die Reihenfolge in der Datenquelle */
       updateOrder(targetIndex) {
-        if (this.draggedIndex !== null && targetIndex !== null) {
+        if (this.draggedIndex !== null && targetIndex !== null && this.draggedIndex !== targetIndex) {
           const [movedItem] = this.items.splice(this.draggedIndex, 1);
           this.items.splice(targetIndex, 0, movedItem);
-          this.draggedIndex = null;
-          this.render(); // Neu rendern
         }
+        this.draggedIndex = null;
+        this.placeholderIndex = null;
+        this.render(); // Neu rendern
       }
     }
 
