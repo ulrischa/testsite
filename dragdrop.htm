@@ -8,7 +8,7 @@
 <body>
 
 <script>
-// Einfache Polyfill-Variante für Touch-Drag&Drop
+// Einfache Touch-Drag&Drop-Polyfill
 (function() {
   const isTouchDevice = 'ontouchstart' in window;
   if (!isTouchDevice) return;
@@ -43,9 +43,8 @@
       draggedEl.classList.remove('dragging');
       if (currentDropTarget && currentDropTarget.parentNode) {
         const dropEvent = new Event('drop', {bubbles: true});
-        dropEvent.dataTransfer = {
-          getData: () => draggedEl.getAttribute('data-id')
-        };
+        // Da dataTransfer unter Touch nicht existiert, simulieren wir es
+        dropEvent.dataTransfer = { getData: () => draggedEl.getAttribute('data-id') };
         currentDropTarget.dispatchEvent(dropEvent);
       }
       draggedEl = null;
@@ -55,7 +54,7 @@
   }, {passive:false});
 })();
 
-// Die Webkomponente
+// Custom Element für sortierbare Liste
 class SortableList extends HTMLElement {
   static get template() {
     return `
@@ -91,7 +90,6 @@ class SortableList extends HTMLElement {
         #container {
           display: block;
         }
-        /* Originale Light-DOM-Inhalte verstecken, da wir daraus unseren State bauen */
         ::slotted(*) {
           display: none;
         }
@@ -103,12 +101,11 @@ class SortableList extends HTMLElement {
 
   constructor() {
     super();
-    this.attachShadow({mode: 'open'});
+    this.attachShadow({mode:'open'});
     this.items = [];
     this.draggedItemId = null;
     this.dragOverIndex = null;
 
-    // Methoden binden
     this.onDragStart = this.onDragStart.bind(this);
     this.onDragEnd   = this.onDragEnd.bind(this);
     this.onDragEnter = this.onDragEnter.bind(this);
@@ -119,10 +116,10 @@ class SortableList extends HTMLElement {
   }
 
   connectedCallback() {
-    // Template einfügen
     this.shadowRoot.innerHTML = this.constructor.template;
+    const slot = this.shadowRoot.querySelector('slot');
+    slot.addEventListener('slotchange', this.onSlotChange);
 
-    // Events für Drag & Drop
     this.shadowRoot.addEventListener('dragstart', this.onDragStart);
     this.shadowRoot.addEventListener('dragenter', this.onDragEnter);
     this.shadowRoot.addEventListener('dragover', this.onDragOver);
@@ -130,18 +127,12 @@ class SortableList extends HTMLElement {
     this.shadowRoot.addEventListener('drop', this.onDrop);
     this.shadowRoot.addEventListener('dragend', this.onDragEnd);
 
-    // Slot überwachen
-    const slot = this.shadowRoot.querySelector('slot');
-    slot.addEventListener('slotchange', this.onSlotChange);
-
-    // Falls schon Kinder da sind, einmal initial laden
-    // (In manchen Browsern feuert slotchange nach connectedCallback evtl. nicht sofort)
+    // Initialer Render nach Slot-Update
     Promise.resolve().then(() => this.onSlotChange());
   }
 
   onSlotChange() {
     const slot = this.shadowRoot.querySelector('slot');
-    if (!slot) return;
     const assigned = slot.assignedElements({flatten:true});
     this.items = assigned.map((child, index) => ({
       id: String(index),
@@ -159,23 +150,25 @@ class SortableList extends HTMLElement {
     if (!target) return;
     this.draggedItemId = target.getAttribute('data-id');
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text', this.draggedItemId);
+    // Wichtig: 'text/plain' verwenden damit es standardkonform ist
+    e.dataTransfer.setData('text/plain', this.draggedItemId);
     this.render();
   }
 
   onDragEnter(e) {
-    // Muss verhindert werden, damit drop erlaubt ist
+    // Ohne preventDefault kann kein Drop erfolgen
     e.preventDefault();
   }
 
   onDragOver(e) {
     e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
     const target = e.target.closest('.sortable-item');
     if (!target || target.getAttribute('data-id') === this.draggedItemId) return;
 
-    const bounding = target.getBoundingClientRect();
-    const offset = e.clientY - bounding.top;
-    const isAfter = offset > bounding.height / 2;
+    const rect = target.getBoundingClientRect();
+    const offset = e.clientY - rect.top;
+    const isAfter = offset > (rect.height / 2);
     const targetIndex = this.indexOfItem(target.getAttribute('data-id'));
     this.dragOverIndex = isAfter ? targetIndex + 1 : targetIndex;
 
@@ -183,7 +176,6 @@ class SortableList extends HTMLElement {
   }
 
   onDragLeave(e) {
-    // Wenn wir den Bereich verlassen, Indikator zurücksetzen
     if (!e.relatedTarget || !this.shadowRoot.contains(e.relatedTarget)) {
       this.dragOverIndex = null;
       this.render();
@@ -191,12 +183,15 @@ class SortableList extends HTMLElement {
   }
 
   onDrop(e) {
-    e.stopPropagation();
-    const draggedId = e.dataTransfer.getData('text');
+    e.preventDefault();
+    const draggedId = e.dataTransfer.getData('text/plain');
     const fromIndex = this.indexOfItem(draggedId);
     let toIndex = this.dragOverIndex !== null ? this.dragOverIndex : this.items.length;
 
-    if (toIndex > this.items.length) toIndex = this.items.length;
+    if (toIndex > this.items.length) {
+      toIndex = this.items.length;
+    }
+
     if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
       const [moved] = this.items.splice(fromIndex, 1);
       this.items.splice(toIndex, 0, moved);
@@ -237,7 +232,7 @@ class SortableList extends HTMLElement {
 customElements.define('sortable-list', SortableList);
 </script>
 
-<!-- Beispiel-Nutzung -->
+<!-- Beispiel -->
 <sortable-list>
   <div>Element A</div>
   <div>Element B</div>
