@@ -77,7 +77,12 @@
 
                 // Initial state
                 this.state = {
-                    items: ['Item 1', 'Item 2', 'Item 3', 'Item 4'],
+                    items: [
+                        { id: 1, content: 'Item 1' },
+                        { id: 2, content: 'Item 2' },
+                        { id: 3, content: 'Item 3' },
+                        { id: 4, content: 'Item 4' },
+                    ],
                 };
 
                 // Bind methods
@@ -98,69 +103,44 @@
                             max-width: 300px;
                         }
                     </style>
-                    <ul></ul>
+                    <ul>
+                        ${this.state.items.map(item => `
+                            <list-item content="${item.content}" data-id="${item.id}"></list-item>
+                        `).join('')}
+                    </ul>
                 `;
 
                 const ul = this.shadowRoot.querySelector('ul');
 
-                // Add event listeners
                 ul.addEventListener('dragover', this.handleDragOver);
                 ul.addEventListener('drop', this.handleDrop);
-
-                // Render list items based on state
-                this.state.items.forEach((item) => {
-                    const listItem = document.createElement('list-item');
-                    listItem.setAttribute('content', item);
-
-                    listItem.addEventListener('dragstart', () => {
-                        this.draggingItem = item;
-                    });
-
-                    listItem.addEventListener('dragend', () => {
-                        this.draggingItem = null;
-                    });
-
-                    ul.appendChild(listItem);
-                });
             }
 
             handleDragOver(event) {
                 event.preventDefault(); // Necessary for drop to work
-
-                const ul = this.shadowRoot.querySelector('ul');
-                const afterElement = this.getDragAfterElement(ul, event.clientY);
-                const draggingElement = ul.querySelector('list-item[content="' + this.draggingItem + '"]');
-
-                if (afterElement == null) {
-                    ul.appendChild(draggingElement);
-                } else {
-                    ul.insertBefore(draggingElement, afterElement);
-                }
             }
 
             handleDrop(event) {
                 event.preventDefault();
 
                 const ul = this.shadowRoot.querySelector('ul');
-                const items = Array.from(ul.children).map((child) => child.getAttribute('content'));
+                const items = Array.from(ul.children).map((child) => {
+                    return {
+                        id: parseInt(child.getAttribute('data-id')),
+                        content: child.getAttribute('content'),
+                    };
+                });
 
-                // Update state
-                this.state = { items };
+                // Update state without directly manipulating the DOM
+                const draggingItem = this.state.items.find(item => item.content === event.dataTransfer.getData('text/plain'));
+                const dropTarget = event.target.closest('list-item');
+                const dropTargetIndex = this.state.items.findIndex(item => item.id === parseInt(dropTarget.getAttribute('data-id')));
+                const draggingIndex = this.state.items.findIndex(item => item === draggingItem);
+
+                this.state.items.splice(draggingIndex, 1);
+                this.state.items.splice(dropTargetIndex, 0, draggingItem);
+
                 this.render();
-            }
-
-            getDragAfterElement(container, y) {
-                const draggableElements = [...container.querySelectorAll('list-item:not([content="' + this.draggingItem + '"])')];
-
-                return draggableElements.reduce((closest, child) => {
-                    const box = child.getBoundingClientRect();
-                    const offset = y - box.top - box.height / 2;
-                    if (offset < 0 && offset > closest.offset) {
-                        return { offset: offset, element: child };
-                    } else {
-                        return closest;
-                    }
-                }, { offset: Number.NEGATIVE_INFINITY }).element;
             }
         }
 
