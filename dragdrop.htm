@@ -68,6 +68,7 @@ class SortableList extends HTMLElement {
           padding: 0.5rem;
           background: #ffffff;
           font-family: sans-serif;
+          position: relative;
         }
         .sortable-item {
           user-select: none;
@@ -92,8 +93,13 @@ class SortableList extends HTMLElement {
         #container {
           display: block;
         }
+        /* Der Slot wird ausgeblendet, damit die Original-Elemente nicht doppelt erscheinen. */
+        ::slotted(*) {
+          display: none;
+        }
       </style>
       <div id="container"></div>
+      <slot></slot>
     `;
   }
 
@@ -110,29 +116,34 @@ class SortableList extends HTMLElement {
     this.onDragOver  = this.onDragOver.bind(this);
     this.onDragLeave = this.onDragLeave.bind(this);
     this.onDrop      = this.onDrop.bind(this);
+    this.onSlotChange= this.onSlotChange.bind(this);
   }
 
   connectedCallback() {
-    // Kind-Elemente des Light-DOM ermitteln, bevor wir sie entfernen
-    const children = Array.from(this.children).filter(el => el.nodeType === Node.ELEMENT_NODE);
-    this.items = children.map((child, index) => ({
-      id: String(index),
-      content: child.innerHTML.trim()
-    }));
+    // Template einmalig in den Shadow DOM einfügen
+    this.shadowRoot.innerHTML = this.constructor.template;
 
-    // Light DOM leeren
-    this.innerHTML = '';
-
-    // Rendern
-    this.render();
-
-    // Event Listener im Shadow DOM
+    // Event Listener im Shadow DOM hinzufügen
     this.shadowRoot.addEventListener('dragstart', this.onDragStart);
     this.shadowRoot.addEventListener('dragenter', this.onDragEnter);
     this.shadowRoot.addEventListener('dragover', this.onDragOver);
     this.shadowRoot.addEventListener('dragleave', this.onDragLeave);
     this.shadowRoot.addEventListener('drop', this.onDrop);
     this.shadowRoot.addEventListener('dragend', this.onDragEnd);
+
+    // Slot überwachen, um nach dem Einfügen der Light-DOM-Kinder rendern zu können
+    const slot = this.shadowRoot.querySelector('slot');
+    slot.addEventListener('slotchange', this.onSlotChange);
+  }
+
+  onSlotChange() {
+    const slot = this.shadowRoot.querySelector('slot');
+    const assigned = slot.assignedElements({flatten:true});
+    this.items = assigned.map((child, index) => ({
+      id: String(index),
+      content: child.innerHTML.trim()
+    }));
+    this.render();
   }
 
   indexOfItem(id) {
@@ -198,9 +209,13 @@ class SortableList extends HTMLElement {
   }
 
   render() {
-    let html = this.constructor.template;
-    let itemsHtml = '';
+    // Erzeuge anhand des States die HTML-Struktur neu
+    // Wir machen eine Art "virtuelles Rendern", indem wir aus dem Template
+    // eine statische HTML-Struktur mit den Items aufbauen
+    const container = this.shadowRoot.querySelector('#container');
+    if (!container) return;
 
+    let itemsHtml = '';
     this.items.forEach((item, index) => {
       if (this.dragOverIndex === index) {
         itemsHtml += `<div class="drop-indicator"></div>`;
@@ -213,9 +228,7 @@ class SortableList extends HTMLElement {
       itemsHtml += `<div class="drop-indicator"></div>`;
     }
 
-    html = html.replace('<div id="container"></div>', `<div id="container">${itemsHtml}</div>`);
-
-    this.shadowRoot.innerHTML = html;
+    container.innerHTML = itemsHtml;
   }
 }
 
