@@ -78,6 +78,7 @@ class SortableList extends HTMLElement {
           border-radius: 4px;
           cursor: move;
           transition: background 0.2s, opacity 0.2s;
+          display: block;
         }
         .sortable-item.dragging {
           opacity: 0.5;
@@ -99,12 +100,10 @@ class SortableList extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({mode: 'open'});
-    // State:
     this.items = [];
     this.draggedItemId = null;
     this.dragOverIndex = null;
 
-    // Methoden-Bindings
     this.onDragStart = this.onDragStart.bind(this);
     this.onDragEnd   = this.onDragEnd.bind(this);
     this.onDragEnter = this.onDragEnter.bind(this);
@@ -114,19 +113,20 @@ class SortableList extends HTMLElement {
   }
 
   connectedCallback() {
-    // Initialer State aus Light-DOM
-    this.items = Array.from(this.children).map((child, index) => ({
+    // Kind-Elemente des Light-DOM ermitteln, bevor wir sie entfernen
+    const children = Array.from(this.children).filter(el => el.nodeType === Node.ELEMENT_NODE);
+    this.items = children.map((child, index) => ({
       id: String(index),
-      content: child.innerHTML
+      content: child.innerHTML.trim()
     }));
 
-    // Light-DOM leeren (Inhalt wird im Shadow gerendert)
+    // Light DOM leeren
     this.innerHTML = '';
 
-    // Initiales Rendering
+    // Rendern
     this.render();
 
-    // Event Listener
+    // Event Listener im Shadow DOM
     this.shadowRoot.addEventListener('dragstart', this.onDragStart);
     this.shadowRoot.addEventListener('dragenter', this.onDragEnter);
     this.shadowRoot.addEventListener('dragover', this.onDragOver);
@@ -167,8 +167,8 @@ class SortableList extends HTMLElement {
   }
 
   onDragLeave(e) {
-    // Wenn wir komplett raus sind
-    if (e.relatedTarget === null || !this.shadowRoot.contains(e.relatedTarget)) {
+    // Prüfen ob wir das gesamte Shadow DOM verlassen haben
+    if (!e.relatedTarget || !this.shadowRoot.contains(e.relatedTarget)) {
       this.dragOverIndex = null;
       this.render();
     }
@@ -179,7 +179,7 @@ class SortableList extends HTMLElement {
     const draggedId = e.dataTransfer.getData('text');
     const fromIndex = this.indexOfItem(draggedId);
     let toIndex = this.dragOverIndex !== null ? this.dragOverIndex : this.items.length;
-    
+
     if (toIndex > this.items.length) toIndex = this.items.length;
     if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
       const [moved] = this.items.splice(fromIndex, 1);
@@ -198,7 +198,6 @@ class SortableList extends HTMLElement {
   }
 
   render() {
-    // Erzeugt das HTML aus dem State, ähnlich wie React render()
     let html = this.constructor.template;
     let itemsHtml = '';
 
@@ -214,11 +213,8 @@ class SortableList extends HTMLElement {
       itemsHtml += `<div class="drop-indicator"></div>`;
     }
 
-    // Füge die Items in den Container ein
     html = html.replace('<div id="container"></div>', `<div id="container">${itemsHtml}</div>`);
 
-    // Kompletten Shadow Root Inhalt ersetzen, kein selektives DOM-Manipulieren,
-    // sondern vollständiger "Virtual-DOM"-ähnlicher Re-Render
     this.shadowRoot.innerHTML = html;
   }
 }
