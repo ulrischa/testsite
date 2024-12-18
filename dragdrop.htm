@@ -8,9 +8,7 @@
 <body>
 
 <script>
-// --- Touch Drag & Drop Polyfill (einfacher Ansatz) ---
-// Simpler Polyfill für Drag & Drop auf Touch-Geräten.
-// Dies ist kein vollwertiger Produktivcode, sondern dient nur der Demonstration.
+// Einfache Polyfill-Variante für Touch-Drag&Drop
 (function() {
   const isTouchDevice = 'ontouchstart' in window;
   if (!isTouchDevice) return;
@@ -57,7 +55,7 @@
   }, {passive:false});
 })();
 
-// --- Custom Element ---
+// Die Webkomponente
 class SortableList extends HTMLElement {
   static get template() {
     return `
@@ -93,7 +91,7 @@ class SortableList extends HTMLElement {
         #container {
           display: block;
         }
-        /* Der Slot wird ausgeblendet, damit die Original-Elemente nicht doppelt erscheinen. */
+        /* Originale Light-DOM-Inhalte verstecken, da wir daraus unseren State bauen */
         ::slotted(*) {
           display: none;
         }
@@ -110,6 +108,7 @@ class SortableList extends HTMLElement {
     this.draggedItemId = null;
     this.dragOverIndex = null;
 
+    // Methoden binden
     this.onDragStart = this.onDragStart.bind(this);
     this.onDragEnd   = this.onDragEnd.bind(this);
     this.onDragEnter = this.onDragEnter.bind(this);
@@ -120,10 +119,10 @@ class SortableList extends HTMLElement {
   }
 
   connectedCallback() {
-    // Template einmalig in den Shadow DOM einfügen
+    // Template einfügen
     this.shadowRoot.innerHTML = this.constructor.template;
 
-    // Event Listener im Shadow DOM hinzufügen
+    // Events für Drag & Drop
     this.shadowRoot.addEventListener('dragstart', this.onDragStart);
     this.shadowRoot.addEventListener('dragenter', this.onDragEnter);
     this.shadowRoot.addEventListener('dragover', this.onDragOver);
@@ -131,13 +130,18 @@ class SortableList extends HTMLElement {
     this.shadowRoot.addEventListener('drop', this.onDrop);
     this.shadowRoot.addEventListener('dragend', this.onDragEnd);
 
-    // Slot überwachen, um nach dem Einfügen der Light-DOM-Kinder rendern zu können
+    // Slot überwachen
     const slot = this.shadowRoot.querySelector('slot');
     slot.addEventListener('slotchange', this.onSlotChange);
+
+    // Falls schon Kinder da sind, einmal initial laden
+    // (In manchen Browsern feuert slotchange nach connectedCallback evtl. nicht sofort)
+    Promise.resolve().then(() => this.onSlotChange());
   }
 
   onSlotChange() {
     const slot = this.shadowRoot.querySelector('slot');
+    if (!slot) return;
     const assigned = slot.assignedElements({flatten:true});
     this.items = assigned.map((child, index) => ({
       id: String(index),
@@ -160,6 +164,7 @@ class SortableList extends HTMLElement {
   }
 
   onDragEnter(e) {
+    // Muss verhindert werden, damit drop erlaubt ist
     e.preventDefault();
   }
 
@@ -178,7 +183,7 @@ class SortableList extends HTMLElement {
   }
 
   onDragLeave(e) {
-    // Prüfen ob wir das gesamte Shadow DOM verlassen haben
+    // Wenn wir den Bereich verlassen, Indikator zurücksetzen
     if (!e.relatedTarget || !this.shadowRoot.contains(e.relatedTarget)) {
       this.dragOverIndex = null;
       this.render();
@@ -209,9 +214,6 @@ class SortableList extends HTMLElement {
   }
 
   render() {
-    // Erzeuge anhand des States die HTML-Struktur neu
-    // Wir machen eine Art "virtuelles Rendern", indem wir aus dem Template
-    // eine statische HTML-Struktur mit den Items aufbauen
     const container = this.shadowRoot.querySelector('#container');
     if (!container) return;
 
