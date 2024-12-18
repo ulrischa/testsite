@@ -24,7 +24,6 @@
                 this.render();
             }
 
-            // Observed attributes to dynamically update content
             static get observedAttributes() {
                 return ['content'];
             }
@@ -36,138 +35,121 @@
             }
 
             render() {
-                // Clear existing content
-                this.shadowRoot.innerHTML = '';
+                this.shadowRoot.innerHTML = `
+                    <style>
+                        li {
+                            padding: 8px 12px;
+                            border: 1px solid #ddd;
+                            margin-bottom: 4px;
+                            background: #f9f9f9;
+                            cursor: grab;
+                        }
+                        li.dragging {
+                            opacity: 0.5;
+                        }
+                    </style>
+                    <li draggable="true">${this.getAttribute('content') || ''}</li>
+                `;
 
-                // Create list item template
-                const li = document.createElement('li');
-                li.textContent = this.getAttribute('content') || '';
-                li.draggable = true;
+                const li = this.shadowRoot.querySelector('li');
+                li.addEventListener('dragstart', (event) => {
+                    event.dataTransfer.setData('text/plain', this.getAttribute('content'));
+                    this.dispatchEvent(new CustomEvent('dragstart', { bubbles: true }));
+                });
 
-                // Add drag event listeners
-                li.addEventListener('dragstart', this.handleDragStart);
-                li.addEventListener('dragend', this.handleDragEnd);
-
-                this.shadowRoot.appendChild(li);
-            }
-
-            handleDragStart(event) {
-                event.dataTransfer.setData('text/plain', event.target.textContent);
-                event.target.classList.add('dragging');
-            }
-
-            handleDragEnd(event) {
-                event.target.classList.remove('dragging');
+                li.addEventListener('dragend', () => {
+                    this.dispatchEvent(new CustomEvent('dragend', { bubbles: true }));
+                });
             }
         }
 
-        // Define the ListItem component
         customElements.define('list-item', ListItem);
 
         /**
          * Web Component for the sortable list.
-         * This component manages a list of sortable items.
          */
         class SortableList extends HTMLElement {
             constructor() {
                 super();
 
-                // Create Shadow DOM
+                // Shadow DOM
                 this.attachShadow({ mode: 'open' });
 
-                // State management
+                // Initial state
                 this.state = {
                     items: ['Item 1', 'Item 2', 'Item 3', 'Item 4'],
                 };
 
-                // Initial rendering
+                // Bind methods
+                this.handleDragOver = this.handleDragOver.bind(this);
+                this.handleDrop = this.handleDrop.bind(this);
+
                 this.render();
             }
 
             render() {
-                // Clear existing content
-                this.shadowRoot.innerHTML = '';
-
-                // Create styles
-                const style = document.createElement('style');
-                style.textContent = `
-                    ul {
-                        list-style: none;
-                        padding: 0;
-                        margin: 0;
-                        border: 1px solid #ccc;
-                        max-width: 300px;
-                    }
-                    li {
-                        padding: 8px 12px;
-                        border: 1px solid #ddd;
-                        margin-bottom: 4px;
-                        background: #f9f9f9;
-                        cursor: grab;
-                    }
-                    li.dragging {
-                        opacity: 0.5;
-                    }
+                this.shadowRoot.innerHTML = `
+                    <style>
+                        ul {
+                            list-style: none;
+                            padding: 0;
+                            margin: 0;
+                            border: 1px solid #ccc;
+                            max-width: 300px;
+                        }
+                    </style>
+                    <ul></ul>
                 `;
 
-                // Create list container
-                const ul = document.createElement('ul');
-                ul.addEventListener('dragover', this.handleDragOver.bind(this));
-                ul.addEventListener('drop', this.handleDrop.bind(this));
+                const ul = this.shadowRoot.querySelector('ul');
 
-                // Populate list items
+                // Add event listeners
+                ul.addEventListener('dragover', this.handleDragOver);
+                ul.addEventListener('drop', this.handleDrop);
+
+                // Render list items based on state
                 this.state.items.forEach((item) => {
                     const listItem = document.createElement('list-item');
                     listItem.setAttribute('content', item);
+
+                    listItem.addEventListener('dragstart', () => {
+                        this.draggingItem = item;
+                    });
+
+                    listItem.addEventListener('dragend', () => {
+                        this.draggingItem = null;
+                    });
+
                     ul.appendChild(listItem);
                 });
-
-                // Append elements to Shadow DOM
-                this.shadowRoot.appendChild(style);
-                this.shadowRoot.appendChild(ul);
             }
 
             handleDragOver(event) {
-                event.preventDefault(); // Allow dropping
-                const ul = this.shadowRoot.querySelector('ul');
-                const afterElement = this.getDragAfterElement(ul, event.clientY);
-                const draggingElement = ul.querySelector('.dragging');
-                if (afterElement == null) {
-                    ul.appendChild(draggingElement);
-                } else {
-                    ul.insertBefore(draggingElement, afterElement);
-                }
+                event.preventDefault(); // Necessary for drop to work
             }
 
             handleDrop(event) {
                 event.preventDefault();
 
-                // Rebuild the state from the updated DOM
                 const ul = this.shadowRoot.querySelector('ul');
-                const newItems = Array.from(ul.children).map(
-                    (item) => item.getAttribute('content')
-                );
-                this.state.items = newItems;
+                const items = Array.from(ul.children).map((child) => child.getAttribute('content'));
+                const dropTarget = event.target.closest('list-item');
 
-                this.render();
-            }
+                if (dropTarget) {
+                    const dropIndex = items.indexOf(dropTarget.getAttribute('content'));
+                    const dragIndex = items.indexOf(this.draggingItem);
 
-            getDragAfterElement(container, y) {
-                const draggableElements = [...container.querySelectorAll('li:not(.dragging)')];
+                    // Reorder items
+                    items.splice(dragIndex, 1);
+                    items.splice(dropIndex, 0, this.draggingItem);
 
-                return draggableElements.reduce((closest, child) => {
-                    const box = child.getBoundingClientRect();
-                    const offset = y - box.top - box.height / 2;
-                    if (offset < 0 && offset > closest.offset) {
-                        return { offset: offset, element: child };
-                    } else {
-                        return closest;
-                    }
-                }, { offset: Number.NEGATIVE_INFINITY }).element;
+                    // Update state
+                    this.state = { items };
+                    this.render();
+                }
             }
         }
 
-        // Define the SortableList component
         customElements.define('sortable-list', SortableList);
     </script>
 </body>
