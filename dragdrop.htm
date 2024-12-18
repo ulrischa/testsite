@@ -126,6 +126,16 @@
 
             handleDragOver(event) {
                 event.preventDefault(); // Necessary for drop to work
+
+                const ul = this.shadowRoot.querySelector('ul');
+                const afterElement = this.getDragAfterElement(ul, event.clientY);
+                const draggingElement = ul.querySelector('list-item[content="' + this.draggingItem + '"]');
+
+                if (afterElement == null) {
+                    ul.appendChild(draggingElement);
+                } else {
+                    ul.insertBefore(draggingElement, afterElement);
+                }
             }
 
             handleDrop(event) {
@@ -133,20 +143,24 @@
 
                 const ul = this.shadowRoot.querySelector('ul');
                 const items = Array.from(ul.children).map((child) => child.getAttribute('content'));
-                const dropTarget = event.target.closest('list-item');
 
-                if (dropTarget) {
-                    const dropIndex = items.indexOf(dropTarget.getAttribute('content'));
-                    const dragIndex = items.indexOf(this.draggingItem);
+                // Update state
+                this.state = { items };
+                this.render();
+            }
 
-                    // Reorder items
-                    items.splice(dragIndex, 1);
-                    items.splice(dropIndex, 0, this.draggingItem);
+            getDragAfterElement(container, y) {
+                const draggableElements = [...container.querySelectorAll('list-item:not([content="' + this.draggingItem + '"])')];
 
-                    // Update state
-                    this.state = { items };
-                    this.render();
-                }
+                return draggableElements.reduce((closest, child) => {
+                    const box = child.getBoundingClientRect();
+                    const offset = y - box.top - box.height / 2;
+                    if (offset < 0 && offset > closest.offset) {
+                        return { offset: offset, element: child };
+                    } else {
+                        return closest;
+                    }
+                }, { offset: Number.NEGATIVE_INFINITY }).element;
             }
         }
 
