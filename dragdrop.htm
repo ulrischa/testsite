@@ -1,320 +1,174 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Sortable Web Component</title>
-<style>
-  /* Allgemeines Styling für die Liste */
-  sortable-list ul {
-    list-style-type: none;
-    padding: 0;
-    margin: 0;
-  }
-
-  sortable-list li {
-    margin: 0 0 5px 0;
-    padding: 10px;
-    background: #f0f0f0;
-    cursor: move;
-    user-select: none;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-  }
-
-  /* Optionale Stile für beim Draggen */
-  sortable-list li.dragging {
-    opacity: 0.5;
-  }
-
-  sortable-list li.drag-over {
-    border: 2px dashed #aaa;
-  }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Component: Sortable List</title>
 </head>
 <body>
+    <sortable-list></sortable-list>
 
-<template id="sortable-list-template">
-  <ul></ul>
-</template>
+    <script>
+        /**
+         * Web Component for individual list items.
+         * This component represents a single list item.
+         */
+        class ListItem extends HTMLElement {
+            constructor() {
+                super();
 
-<template id="sortable-item-template">
-  <li draggable="true">
-    <slot></slot>
-  </li>
-</template>
+                // Create Shadow DOM
+                this.attachShadow({ mode: 'open' });
 
-<script type="module">
-  /**
-   * SortableItem
-   * 
-   * Dieses Web-Component repräsentiert ein einzelnes Listenelement,
-   * das in einer sortierbaren Liste verwendet wird. Es ist draggable
-   * und delegiert die Drag & Drop Events an den Parent, ohne selbst
-   * die Datenstruktur zu manipulieren.
-   */
-  class SortableItem extends HTMLElement {
-    constructor() {
-      super();
-      this.attachShadow({ mode: 'open' });
-      
-      // Template clonieren
-      const template = document.getElementById('sortable-item-template').content.cloneNode(true);
-      this.shadowRoot.appendChild(template);
-      
-      // Referenzen auf interne Elemente
-      this._liElement = this.shadowRoot.querySelector('li');
+                // Initial rendering
+                this.render();
+            }
 
-      // Drag Events
-      this._liElement.addEventListener('dragstart', (e) => this._onDragStart(e));
-      this._liElement.addEventListener('dragend', (e) => this._onDragEnd(e));
-    }
+            // Observed attributes to dynamically update content
+            static get observedAttributes() {
+                return ['content'];
+            }
 
-    /**
-     * Wird aufgerufen, wenn das Element in das DOM eingebunden wird
-     * und dient als Setup.
-     */
-    connectedCallback() {
-      // Attribut auslesen und im li als Text setzen
-      // Wenn die Daten von außen kommen (über data binding), könnten
-      // wir hier ansetzen. Aktuell geht der Text über <slot>.
-    }
+            attributeChangedCallback(name, oldValue, newValue) {
+                if (name === 'content') {
+                    this.render();
+                }
+            }
 
-    /**
-     * Start des Drag-Vorgangs.
-     * Hier wird ein Custom Event ausgelöst, damit der übergeordnete
-     * SortableList die nötigen Informationen erhält.
-     */
-    _onDragStart(event) {
-      // Element bekommt eine Dragging Klasse
-      this._liElement.classList.add('dragging');
+            render() {
+                // Clear existing content
+                this.shadowRoot.innerHTML = '';
 
-      // Index des Items an den Parent weitergeben
-      // Wir nutzen ein CustomEvent mit detail-Informationen
-      const dragStartEvent = new CustomEvent('item-drag-start', {
-        bubbles: true,
-        composed: true,
-        detail: {
-          draggedItem: this, 
+                // Create list item template
+                const li = document.createElement('li');
+                li.textContent = this.getAttribute('content') || '';
+                li.draggable = true;
+
+                // Add drag event listeners
+                li.addEventListener('dragstart', this.handleDragStart);
+                li.addEventListener('dragend', this.handleDragEnd);
+
+                this.shadowRoot.appendChild(li);
+            }
+
+            handleDragStart(event) {
+                event.dataTransfer.setData('text/plain', event.target.textContent);
+                event.target.classList.add('dragging');
+            }
+
+            handleDragEnd(event) {
+                event.target.classList.remove('dragging');
+            }
         }
-      });
-      this.dispatchEvent(dragStartEvent);
 
-      // Transfer Data setzen
-      event.dataTransfer.effectAllowed = 'move';
-      event.dataTransfer.setData('text/plain', 'dragging');
-    }
+        // Define the ListItem component
+        customElements.define('list-item', ListItem);
 
-    /**
-     * Ende des Drag-Vorgangs. Entfernt CSS-Klassen.
-     */
-    _onDragEnd(event) {
-      this._liElement.classList.remove('dragging');
-      const dragEndEvent = new CustomEvent('item-drag-end', {
-        bubbles: true,
-        composed: true
-      });
-      this.dispatchEvent(dragEndEvent);
-    }
-  }
+        /**
+         * Web Component for the sortable list.
+         * This component manages a list of sortable items.
+         */
+        class SortableList extends HTMLElement {
+            constructor() {
+                super();
 
-  customElements.define('sortable-item', SortableItem);
+                // Create Shadow DOM
+                this.attachShadow({ mode: 'open' });
 
-  /**
-   * SortableList
-   * 
-   * Dieses Web-Component stellt eine sortierbare Liste dar, basierend
-   * auf einem Array von Daten. Es handelt Drag & Drop Events, um die
-   * Reihenfolge der Einträge neu anzuordnen.
-   * 
-   * Es nutzt eine interne Datenbindung über eine set data(...) Property,
-   * um die Liste bei Änderungen der Daten neu zu rendern.
-   */
-  class SortableList extends HTMLElement {
-    constructor() {
-      super();
-      this.attachShadow({ mode: 'open' });
-      
-      // Template zum Rendern der Liste
-      const template = document.getElementById('sortable-list-template').content.cloneNode(true);
-      this.shadowRoot.appendChild(template);
+                // State management
+                this.state = {
+                    items: ['Item 1', 'Item 2', 'Item 3', 'Item 4'],
+                };
 
-      // Referenz auf das UL-Element
-      this._ulElement = this.shadowRoot.querySelector('ul');
+                // Initial rendering
+                this.render();
+            }
 
-      // Interne Datenstruktur
-      this._data = [];
+            render() {
+                // Clear existing content
+                this.shadowRoot.innerHTML = '';
 
-      // Variablen für Drag & Drop
-      this._draggedItem = null;
-      this._dragOverItem = null;
+                // Create styles
+                const style = document.createElement('style');
+                style.textContent = `
+                    ul {
+                        list-style: none;
+                        padding: 0;
+                        margin: 0;
+                        border: 1px solid #ccc;
+                        max-width: 300px;
+                    }
+                    li {
+                        padding: 8px 12px;
+                        border: 1px solid #ddd;
+                        margin-bottom: 4px;
+                        background: #f9f9f9;
+                        cursor: grab;
+                    }
+                    li.dragging {
+                        opacity: 0.5;
+                    }
+                `;
 
-      // Event Listener für die UL, um Drag & Drop Events abzufangen
-      // und die Reihenfolge der Elemente zu ändern.
-      this._ulElement.addEventListener('dragover', (e) => this._onDragOver(e));
-      this._ulElement.addEventListener('drop', (e) => this._onDrop(e));
+                // Create list container
+                const ul = document.createElement('ul');
+                ul.addEventListener('dragover', this.handleDragOver.bind(this));
+                ul.addEventListener('drop', this.handleDrop.bind(this));
 
-      // Auch 'item-drag-start' und 'item-drag-end' von Kind-Items abfangen
-      this.addEventListener('item-drag-start', (e) => this._onItemDragStart(e));
-      this.addEventListener('item-drag-end', (e) => this._onItemDragEnd(e));
-    }
+                // Populate list items
+                this.state.items.forEach((item) => {
+                    const listItem = document.createElement('list-item');
+                    listItem.setAttribute('content', item);
+                    ul.appendChild(listItem);
+                });
 
-    /**
-     * Getter für die Daten.
-     * Hier könnte optional eine Kopie zurückgegeben werden,
-     * um Mutationen von außen zu verhindern.
-     */
-    get data() {
-      return this._data;
-    }
+                // Append elements to Shadow DOM
+                this.shadowRoot.appendChild(style);
+                this.shadowRoot.appendChild(ul);
+            }
 
-    /**
-     * Setter für die Daten. Sobald die Daten gesetzt werden,
-     * wird die Liste neu gerendert.
-     */
-    set data(newData) {
-      if (Array.isArray(newData)) {
-        this._data = newData;
-        this._render();
-      } else {
-        console.error('data muss ein Array sein.');
-      }
-    }
+            handleDragOver(event) {
+                event.preventDefault(); // Allow dropping
+                const ul = this.shadowRoot.querySelector('ul');
+                const afterElement = this.getDragAfterElement(ul, event.clientY);
+                const draggingElement = ul.querySelector('.dragging');
+                if (afterElement == null) {
+                    ul.appendChild(draggingElement);
+                } else {
+                    ul.insertBefore(draggingElement, afterElement);
+                }
+            }
 
-    /**
-     * Rendert die Liste neu basierend auf this._data.
-     * Hier findet kein direktes manuelles DOM-Update statt,
-     * sondern ein deklaratives Neu-Rendern.
-     */
-    _render() {
-      // Bestehende Inhalte clearen (Shadow DOM reset)
-      this._ulElement.innerHTML = '';
+            handleDrop(event) {
+                event.preventDefault();
 
-      // Für jedes Datenelement ein <sortable-item> erzeugen
-      this._data.forEach((itemData) => {
-        const item = document.createElement('sortable-item');
-        // Daten als Textknoten per Slot
-        item.textContent = itemData;
-        this._ulElement.appendChild(item);
-      });
-    }
+                // Rebuild the state from the updated DOM
+                const ul = this.shadowRoot.querySelector('ul');
+                const newItems = Array.from(ul.children).map(
+                    (item) => item.getAttribute('content')
+                );
+                this.state.items = newItems;
 
-    /**
-     * Wird ausgelöst, wenn ein Item den Drag-Vorgang startet.
-     * Hier merken wir uns das betreffende Element.
-     */
-    _onItemDragStart(event) {
-      this._draggedItem = event.detail.draggedItem;
-    }
+                this.render();
+            }
 
-    /**
-     * Wird aufgerufen, wenn der Drag-Vorgang beendet ist.
-     * Hier können wir Cleanup vornehmen.
-     */
-    _onItemDragEnd(event) {
-      this._draggedItem = null;
-      this._dragOverItem = null;
-      // Entferne ggf. Drag-Over Klassen von Items
-      const items = this._ulElement.querySelectorAll('sortable-item li');
-      items.forEach(i => i.classList.remove('drag-over'));
-    }
+            getDragAfterElement(container, y) {
+                const draggableElements = [...container.querySelectorAll('li:not(.dragging)')];
 
-    /**
-     * Dragover-Event ermöglicht das Droppen auf dieses Element.
-     * Hier ermitteln wir, über welchem Element sich der Mauszeiger gerade befindet.
-     */
-    _onDragOver(event) {
-      event.preventDefault(); // Erlaubt das Droppen
-      // Finde das Item unter der Maus
-      const afterElement = this._getItemAfterMousePosition(event.clientY);
-      const items = this._ulElement.querySelectorAll('sortable-item li');
-      items.forEach(i => i.classList.remove('drag-over'));
-
-      if (afterElement && afterElement !== this._draggedItem) {
-        afterElement.querySelector('li')?.classList.add('drag-over');
-      }
-    }
-
-    /**
-     * Drop-Event:
-     * Hier ändern wir die Reihenfolge des Arrays und rendern neu.
-     */
-    _onDrop(event) {
-      event.preventDefault();
-      // Ziel-Element ermitteln
-      const afterElement = this._getItemAfterMousePosition(event.clientY);
-
-      // Aktuelle Reihenfolge herausfinden
-      const items = Array.from(this._ulElement.querySelectorAll('sortable-item'));
-
-      // Indexe ermitteln
-      const oldIndex = items.indexOf(this._draggedItem);
-      let newIndex = items.indexOf(afterElement);
-      if (newIndex === -1) {
-        // Wenn kein afterElement vorhanden ist, wird am Ende eingefügt
-        newIndex = items.length;
-      }
-
-      // Array neu sortieren
-      const movedItem = this._data.splice(oldIndex, 1)[0];
-      this._data.splice(newIndex, 0, movedItem);
-
-      // Neu rendern
-      this._render();
-      
-      // Event zur Außenwelt schicken, falls gewünscht
-      const reorderEvent = new CustomEvent('list-reordered', {
-        detail: { data: this._data }
-      });
-      this.dispatchEvent(reorderEvent);
-    }
-
-    /**
-     * Hilfsfunktion, um das Listenelement zu bestimmen, über dem sich der Mauszeiger aktuell befindet.
-     * Wir holen uns alle Items und schauen, welches das nächste Item unterhalb der aktuellen Mausposition ist.
-     */
-    _getItemAfterMousePosition(y) {
-      const items = [...this._ulElement.querySelectorAll('sortable-item')].filter(item => item !== this._draggedItem);
-      
-      // Finde das nächste Element unter der Maus
-      let closest = null;
-      let closestOffset = Number.POSITIVE_INFINITY;
-
-      for (const item of items) {
-        const rect = item.shadowRoot.querySelector('li').getBoundingClientRect();
-        const offset = y - rect.top - rect.height / 2;
-
-        if (offset < 0 && offset > closestOffset) {
-          closest = item;
-          closestOffset = offset;
+                return draggableElements.reduce((closest, child) => {
+                    const box = child.getBoundingClientRect();
+                    const offset = y - box.top - box.height / 2;
+                    if (offset < 0 && offset > closest.offset) {
+                        return { offset: offset, element: child };
+                    } else {
+                        return closest;
+                    }
+                }, { offset: Number.NEGATIVE_INFINITY }).element;
+            }
         }
-      }
 
-      return closest;
-    }
-
-    /**
-     * Wenn das Element ins DOM kommt, können wir z.B. eine Initialisierung der Daten machen.
-     */
-    connectedCallback() {
-      // Falls das Element ein Attribut "data" hat, könnten wir es hier parsen.
-      // Zum Beispiel: <sortable-list data='["A", "B", "C"]'></sortable-list>
-      if (this.hasAttribute('data')) {
-        try {
-          const parsedData = JSON.parse(this.getAttribute('data'));
-          this.data = parsedData;
-        } catch (e) {
-          console.error('Fehler beim Parsen des data Attributes:', e);
-        }
-      }
-    }
-  }
-
-  customElements.define('sortable-list', SortableList);
-</script>
-
-<!-- Beispielanwendung der sortierbaren Liste -->
-<sortable-list data='["Item 1","Item 2","Item 3","Item 4","Item 5"]'></sortable-list>
-
+        // Define the SortableList component
+        customElements.define('sortable-list', SortableList);
+    </script>
 </body>
 </html>
