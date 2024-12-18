@@ -1,331 +1,279 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Sortable Webcomponent</title>
+<title>Drag & Drop Web Component</title>
 <style>
-  body {
+  :host {
+    display: block;
+    position: relative;
     font-family: sans-serif;
-    margin: 20px;
   }
-  .example-container {
-    width: 300px;
-    margin: 0 auto;
+
+  .container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .item {
+    background: #fff;
+    border: 1px solid #ccc;
+    padding: 0.5rem;
+    cursor: move;
+    user-select: none;
+    transition: background-color 0.2s, box-shadow 0.2s;
+  }
+
+  .item.dragging {
+    opacity: 0.8;
+    background-color: #f0f0f0;
+    box-shadow: 0 0 8px rgba(0,0,0,0.2);
+  }
+
+  .placeholder {
+    background: #ddeeff;
+    border: 1px dashed #88aaff;
+    min-height: 2rem;
+    transition: background-color 0.2s;
   }
 </style>
 </head>
 <body>
-<div class="example-container">
-  <h1>Sortable Items</h1>
-  <!-- Beispielinstanz der Webkomponente mit direkt eingefügten Einträgen -->
-  <sortable-list>
-    <div>Eintrag A</div>
-    <div>Eintrag B</div>
-    <div>Eintrag C</div>
-    <div>Eintrag D</div>
-    <div>Eintrag E</div>
-  </sortable-list>
-</div>
+
+<!-- Polyfill für Touch-Drag & Drop (Minimal) -->
+<!-- Hinweis: Dies ist ein sehr vereinfachtes Polyfill, um DnD Events über Touch auszulösen -->
+<script>
+  (function() {
+    let touchSource = null;
+
+    document.addEventListener('touchstart', e => {
+      const target = e.target.closest('[draggable="true"]');
+      if (target) {
+        touchSource = target;
+        const dragStartEvent = new Event('dragstart', { bubbles: true, cancelable: true });
+        target.dispatchEvent(dragStartEvent);
+      }
+    }, { passive: true });
+
+    document.addEventListener('touchmove', e => {
+      if (touchSource) {
+        e.preventDefault();
+        const dragEvent = new Event('dragover', { bubbles: true, cancelable: true });
+        touchSource.dispatchEvent(dragEvent);
+      }
+    }, { passive: false });
+
+    document.addEventListener('touchend', e => {
+      if (touchSource) {
+        const dropEvent = new Event('drop', { bubbles: true, cancelable: true });
+        touchSource.dispatchEvent(dropEvent);
+        const dragEndEvent = new Event('dragend', { bubbles: true, cancelable: true });
+        touchSource.dispatchEvent(dragEndEvent);
+        touchSource = null;
+      }
+    });
+  })();
+</script>
+
+<template id="sortable-template">
+  <div class="container">
+    <!-- Items werden hier gerendert -->
+  </div>
+</template>
 
 <script>
-/**
- * Polyfill für Touch-Drag & Drop:
- * Dieser Polyfill simuliert Drag & Drop auf Touch-Geräten, indem er Touch-Events in Drag-Events umwandelt.
- * Funktioniert nur auf Geräten ohne natives Drag & Drop.
- */
-(function () {
-  if ('ontouchstart' in window && !('draggable' in document.createElement('span'))) {
-    let dragSrcEl = null;
-    let currentlyDragging = false;
-    let clonedEl = null;
-    let offsetX = 0;
-    let offsetY = 0;
+  class SortableList extends HTMLElement {
+    constructor() {
+      super();
+      this.attachShadow({ mode: 'open' });
+      // Internes State-Array für die Items
+      this._items = [];
+      this._draggedIndex = null;
+      this._dragOverIndex = null;
+    }
 
-    document.addEventListener('touchstart', function(e) {
-      const target = e.target.closest('[draggable="true"]');
-      if (!target) return;
-      dragSrcEl = target;
-      currentlyDragging = false;
-      const rect = target.getBoundingClientRect();
-      const touch = e.touches[0];
-      offsetX = touch.clientX - rect.left;
-      offsetY = touch.clientY - rect.top;
-    }, {passive: false});
+    static get observedAttributes() {
+      return ['items'];
+    }
 
-    document.addEventListener('touchmove', function(e) {
-      if (!dragSrcEl) return;
-      e.preventDefault();
-      if (!currentlyDragging) {
-        let dragStartEvent = new Event('dragstart', {bubbles: true, cancelable: true});
-        dragSrcEl.dispatchEvent(dragStartEvent);
-        currentlyDragging = true;
-        clonedEl = dragSrcEl.cloneNode(true);
-        clonedEl.style.position = 'fixed';
-        clonedEl.style.pointerEvents = 'none';
-        clonedEl.style.opacity = '0.8';
-        clonedEl.style.top = '-9999px';
-        clonedEl.style.left = '-9999px';
-        clonedEl.style.width = dragSrcEl.getBoundingClientRect().width + 'px';
-        clonedEl.style.zIndex = '9999';
-        document.body.appendChild(clonedEl);
+    attributeChangedCallback(name, oldVal, newVal) {
+      if (name === 'items') {
+        try {
+          this._items = JSON.parse(newVal);
+        } catch (e) {
+          this._items = [];
+        }
+        this.render();
       }
-      const touch = e.touches[0];
-      if (clonedEl) {
-        clonedEl.style.left = (touch.clientX - offsetX) + 'px';
-        clonedEl.style.top = (touch.clientY - offsetY) + 'px';
-      }
-      let dragOverEvent = new Event('dragover', {bubbles: true, cancelable: true});
-      let target = document.elementFromPoint(touch.clientX, touch.clientY);
-      if (target) target.dispatchEvent(dragOverEvent);
-    }, {passive: false});
+    }
 
-    document.addEventListener('touchend', function(e) {
-      if (currentlyDragging && dragSrcEl) {
-        const touch = e.changedTouches[0];
-        let dropTarget = document.elementFromPoint(touch.clientX, touch.clientY);
-        if (dropTarget) {
-          let dragEndEvent = new Event('dragend', {bubbles: true, cancelable: true});
-          dragSrcEl.dispatchEvent(dragEndEvent);
-          let dropEvent = new Event('drop', {bubbles: true, cancelable: true});
-          dropTarget.dispatchEvent(dropEvent);
+    // Getter und Setter für Items
+    get items() {
+      return this._items;
+    }
+
+    set items(value) {
+      if (Array.isArray(value)) {
+        this._items = value;
+        this.render();
+      }
+    }
+
+    connectedCallback() {
+      // Falls keine Items gesetzt wurden
+      if (!this.hasAttribute('items')) {
+        // Prüfe ob es bereits Kinder gibt, dann auslesen
+        const initialItems = Array.from(this.children).map(el => el.textContent.trim());
+        this.items = initialItems;
+      } else {
+        // Items bereits über Attribut
+        try {
+          this._items = JSON.parse(this.getAttribute('items'));
+        } catch(e) {
+          this._items = [];
         }
       }
-      if (clonedEl && clonedEl.parentNode) {
-        clonedEl.parentNode.removeChild(clonedEl);
+
+      this.render();
+
+      // Event Listener für Drag and Drop
+      this.shadowRoot.addEventListener('dragstart', this._onDragStart.bind(this));
+      this.shadowRoot.addEventListener('dragend', this._onDragEnd.bind(this));
+      this.shadowRoot.addEventListener('dragover', this._onDragOver.bind(this));
+      this.shadowRoot.addEventListener('drop', this._onDrop.bind(this));
+    }
+
+    // Data-Binding / Render Logik: komplette Neu-Render des Inhalts
+    // Keine direkte DOM-Manipulation per Hand, sondern vollständiges Re-Rendering
+    render() {
+      const template = document.getElementById('sortable-template');
+      const content = template.content.cloneNode(true);
+
+      const container = content.querySelector('.container');
+      
+      // Falls ein Drag-Over stattfindet, wollen wir eine Platzhalter-Position einfügen
+      // items werden neu gemapped unter Berücksichtigung des Platzhalters.
+      let renderedItems = [...this._items];
+
+      // Wenn wir gerade über ein Element hovern, fügen wir an dieser Stelle eine Placeholder-Div ein.
+      if (this._dragOverIndex !== null && this._dragOverIndex >= 0) {
+        renderedItems = [
+          ...renderedItems.slice(0, this._dragOverIndex),
+          { placeholder: true },
+          ...renderedItems.slice(this._dragOverIndex)
+        ];
       }
-      dragSrcEl = null;
-      clonedEl = null;
-      currentlyDragging = false;
-    }, {passive: false});
-  }
-})();
-</script>
 
-<script>
-/**
- * WebComponent <sortable-list>:
- * - Liest die Items aus dem Light-DOM aus und rendert sie im Shadow-DOM neu.
- * - Nutzt standardmäßiges Drag & Drop auf Desktop.
- * - Mit Polyfill ist auch Mobile Drag & Drop möglich.
- * - Keinerlei direkte DOM-Manipulation einzelner Knoten zum Umsortieren, sondern komplettes Neu-Rendern bei Datenänderung.
- * - Visuelles Feedback: gezogenes Element wird transparent, ein Platzhalter zeigt die Drop-Position.
- * 
- * Verbesserungen gegenüber der vorherigen Version:
- * - Sicherstellen, dass dragstart/dragover/dragend/drop korrekt funktionieren, indem Events direkt am Container
- *   bzw. an den Items hängen.
- * - setDataTransfer sicherstellen, um den Drag-Vorgang einzuleiten.
- * - Nicht stopPropagation im dragstart verwenden.
- * - dragover auf Container implementieren, um ein zuverlässiges Droptarget zu haben.
- */
+      renderedItems.forEach((item, index) => {
+        if (item.placeholder) {
+          const placeholderEl = document.createElement('div');
+          placeholderEl.className = 'placeholder';
+          container.appendChild(placeholderEl);
+        } else {
+          const div = document.createElement('div');
+          div.className = 'item';
+          div.setAttribute('draggable', 'true');
+          div.textContent = item;
+          // Wenn dieses Element gerade gezogen wird
+          if (this._draggedIndex !== null && this._draggedIndex !== undefined && !item.placeholder && this._items[this._draggedIndex] === item) {
+            div.classList.add('dragging');
+          }
+          container.appendChild(div);
+        }
+      });
 
-class SortableList extends HTMLElement {
-  constructor() {
-    super();
-    this.attachShadow({ mode: 'open' });
-    this.items = [];
-    this.draggedIndex = null;
-    this.dropIndex = null;
-    this.draggingEl = null;
-  }
-
-  connectedCallback() {
-    const elementNodes = Array.from(this.children).filter(n => n.nodeType === Node.ELEMENT_NODE);
-    this.items = elementNodes.map(el => el.innerHTML);
-    // Light DOM leeren
-    while (this.firstChild) {
-      this.removeChild(this.firstChild);
-    }
-    this.render();
-  }
-
-  setItems(newItems) {
-    this.items = newItems;
-    this.render();
-  }
-
-  handleDragStart(e, index) {
-    // Damit Drag & Drop sicher startet, müssen wir Daten setzen
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(index));
-    this.draggedIndex = index;
-    this.draggingEl = e.target;
-    // Optional ein eigenes Drag Image setzen, um ein konsistentes Verhalten zu erzwingen
-    if (typeof e.dataTransfer.setDragImage === 'function') {
-      let crt = e.target.cloneNode(true);
-      crt.style.position = 'absolute';
-      crt.style.top = '-9999px';
-      crt.style.left = '-9999px';
-      crt.style.opacity = '0.7';
-      document.body.appendChild(crt);
-      e.dataTransfer.setDragImage(crt, 0, 0);
-      setTimeout(() => document.body.removeChild(crt), 0);
-    }
-    this.render();
-  }
-
-  handleDragOver(e) {
-    // Dragover auf dem Container, wir bestimmen anhand der Mausposition, wo das Element eingefügt werden soll
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-
-    const container = this.shadowRoot.querySelector('.list-container');
-    const itemsEls = Array.from(container.querySelectorAll('.list-item'));
-    const mouseY = e.clientY;
-
-    // Finde das Item unter der Maus oder die nächste Position
-    let foundIndex = this.items.length;
-    for (let i = 0; i < itemsEls.length; i++) {
-      const rect = itemsEls[i].getBoundingClientRect();
-      if (mouseY < rect.top + rect.height / 2) {
-        foundIndex = i;
-        break;
-      }
+      // ShadowRoot wird neu gesetzt
+      this.shadowRoot.innerHTML = '';
+      this.shadowRoot.appendChild(content);
     }
 
-    if (foundIndex !== this.dropIndex) {
-      this.dropIndex = foundIndex;
+    _onDragStart(e) {
+      // Finde den Index des Elements
+      const itemEl = e.target.closest('.item');
+      if (!itemEl) return;
+      this._draggedIndex = this._getItemIndexFromEvent(e);
+      e.dataTransfer.effectAllowed = 'move';
+      // Nur für Desktop DnD: leeres Image als Drag-Image, um die Darstellung zu steuern
+      const img = document.createElement('img');
+      img.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4////fyYGBgYGJ1BAB/4CIIYGByBgAAAABJRU5ErkJggg==';
+      e.dataTransfer.setDragImage(img, 0, 0); 
       this.render();
     }
-  }
 
-  handleDrop(e) {
-    e.preventDefault();
-    const fromIndex = parseInt(e.dataTransfer.getData('text/plain'), 10);
-    const toIndex = (typeof this.dropIndex === 'number') ? this.dropIndex : this.items.length;
-    this.moveItem(fromIndex, toIndex);
-    this.draggedIndex = null;
-    this.dropIndex = null;
-    this.draggingEl = null;
-    this.render();
-  }
-
-  handleDragEnd() {
-    this.draggedIndex = null;
-    this.dropIndex = null;
-    this.draggingEl = null;
-    this.render();
-  }
-
-  moveItem(fromIndex, toIndex) {
-    if (fromIndex === toIndex || fromIndex < 0 || fromIndex >= this.items.length) return;
-    const newItems = [...this.items];
-    const [moved] = newItems.splice(fromIndex, 1);
-    if (toIndex > newItems.length) {
-      newItems.push(moved);
-    } else {
-      newItems.splice(toIndex, 0, moved);
-    }
-    this.setItems(newItems);
-  }
-
-  template() {
-    const styles = `
-      :host {
-        display: block;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-        background: #f9f9f9;
-        padding: 0;
-        user-select: none;
-      }
-      .list-container {
-        display: block;
-        position: relative;
-      }
-      .list-item {
-        padding: 10px;
-        background: #fff;
-        border-bottom: 1px solid #ddd;
-        cursor: move;
-        transition: background 0.2s, opacity 0.2s;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .list-item:last-child {
-        border-bottom: none;
-      }
-      .list-item.dragging {
-        opacity: 0.4;
-        background: #e0e0e0;
-      }
-      .placeholder {
-        height: 40px;
-        background: #f0faff;
-        border: 2px dashed #2196f3;
-        margin: 0;
-      }
-      .list-item:hover {
-        background: #f5f5f5;
-      }
-    `;
-
-    const children = [];
-    // Platzhalter und Items rendern
-    for (let i = 0; i < this.items.length; i++) {
-      // Platzhalter vor diesem Item, falls nötig
-      if (this.dropIndex !== null && this.dropIndex === i && this.dropIndex !== this.draggedIndex) {
-        children.push(`<div class="placeholder"></div>`);
-      }
-      const isDragged = (i === this.draggedIndex);
-      children.push(`
-        <div 
-          class="list-item ${isDragged ? 'dragging' : ''}"
-          draggable="true"
-          data-index="${i}"
-        >${this.items[i]}</div>
-      `);
+    _onDragEnd(e) {
+      this._draggedIndex = null;
+      this._dragOverIndex = null;
+      this.render();
+      // Hier könnte ein Custom-Event abgesetzt werden, um das neue Items-Array anzuzeigen
+      this.dispatchEvent(new CustomEvent('items-changed', { detail: { items: this._items } }));
     }
 
-    // Platzhalter am Ende
-    if (this.dropIndex !== null && this.dropIndex === this.items.length && this.dropIndex !== this.draggedIndex) {
-      children.push(`<div class="placeholder"></div>`);
+    _onDragOver(e) {
+      e.preventDefault();
+      const overIndex = this._getItemIndexFromEvent(e, true);
+      if (overIndex !== this._dragOverIndex) {
+        this._dragOverIndex = overIndex;
+        this.render();
+      }
     }
 
-    return `
-      <style>${styles}</style>
-      <div class="list-container">
-        ${children.join('')}
-      </div>
-    `;
+    _onDrop(e) {
+      e.preventDefault();
+      const dropIndex = this._dragOverIndex === null ? this._items.length : this._dragOverIndex;
+      if (this._draggedIndex !== null && dropIndex !== null) {
+        // Element neu anordnen
+        const draggedItem = this._items[this._draggedIndex];
+        const newItems = [...this._items];
+        // Altes Element entfernen
+        newItems.splice(this._draggedIndex, 1);
+        // An neuer Stelle einfügen
+        // Wenn dropIndex > length, auf length begrenzen
+        const insertIndex = Math.min(dropIndex, newItems.length);
+        newItems.splice(insertIndex, 0, draggedItem);
+        this._items = newItems;
+      }
+      this._draggedIndex = null;
+      this._dragOverIndex = null;
+      this.render();
+      this.dispatchEvent(new CustomEvent('items-changed', { detail: { items: this._items } }));
+    }
+
+    _getItemIndexFromEvent(e, includePlaceholder = false) {
+      const container = this.shadowRoot.querySelector('.container');
+      const children = Array.from(container.children);
+      const targetEl = e.target.closest('.item, .placeholder');
+      if (!targetEl) {
+        // Falls wir nicht über einem item oder placeholder sind, Position am Ende
+        return children.filter(ch => ch.classList.contains('item') || ch.classList.contains('placeholder')).length;
+      }
+
+      // Index ermitteln
+      let filtered = children.filter(ch => ch.classList.contains('item') || ch.classList.contains('placeholder'));
+      let index = filtered.indexOf(targetEl);
+      if (!includePlaceholder) {
+        // Wenn wir den Index im "echten" Array brauchen,
+        // dann müssen wir Placeholder ignorieren
+        // Placeholder zählt nicht als echtes Item
+        // Wir können den Placeholder aber nutzen, um die finale Position abzuleiten
+        if (targetEl.classList.contains('placeholder')) {
+          // Der Placeholder repräsentiert den dropIndex
+          return index;
+        } else {
+          // Item-Index ermitteln ohne Placeholder
+          const placeholderCountBefore = filtered.slice(0, index).filter(ch => ch.classList.contains('placeholder')).length;
+          return index - placeholderCountBefore;
+        }
+      } else {
+        // Hier wollen wir die Stelle für Drop bestimmen (inkl. Placeholder)
+        return index;
+      }
+    }
   }
 
-  addEventListeners() {
-    const container = this.shadowRoot.querySelector('.list-container');
-    if (!container) return;
-
-    // Events auf einzelnen Items
-    const itemEls = container.querySelectorAll('.list-item');
-    itemEls.forEach((el) => {
-      const index = parseInt(el.getAttribute('data-index'), 10);
-
-      el.addEventListener('dragstart', (e) => {
-        this.handleDragStart(e, index);
-      });
-      // dragend auf Item
-      el.addEventListener('dragend', () => {
-        this.handleDragEnd();
-      });
-    });
-
-    // Container-Events für dragover/drop
-    // So können wir die Position bestimmen, an der gedroppt werden soll
-    container.addEventListener('dragover', (e) => {
-      this.handleDragOver(e);
-    });
-    container.addEventListener('drop', (e) => {
-      this.handleDrop(e);
-    });
-  }
-
-  render() {
-    this.shadowRoot.innerHTML = this.template();
-    this.addEventListeners();
-  }
-}
-
-customElements.define('sortable-list', SortableList);
+  customElements.define('sortable-list', SortableList);
 </script>
+
+<sortable-list items='["Erstes Element", "Zweites Element", "Drittes Element", "Viertes Element"]'></sortable-list>
 </body>
 </html>
