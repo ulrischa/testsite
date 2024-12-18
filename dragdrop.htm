@@ -52,12 +52,17 @@
                 `;
 
                 const li = this.shadowRoot.querySelector('li');
+
+                // Add dragstart event listener
                 li.addEventListener('dragstart', (event) => {
+                    event.preventDefault(); // Prevent default browser behavior
                     event.dataTransfer.setData('text/plain', this.getAttribute('content'));
                     this.dispatchEvent(new CustomEvent('dragstart', { bubbles: true }));
                 });
 
-                li.addEventListener('dragend', () => {
+                // Add dragend event listener
+                li.addEventListener('dragend', (event) => {
+                    event.preventDefault();
                     this.dispatchEvent(new CustomEvent('dragend', { bubbles: true }));
                 });
             }
@@ -112,12 +117,13 @@
 
                 const ul = this.shadowRoot.querySelector('ul');
 
+                // Add dragover and drop event listeners
                 ul.addEventListener('dragover', this.handleDragOver);
                 ul.addEventListener('drop', this.handleDrop);
             }
 
             handleDragOver(event) {
-                event.preventDefault(); // Necessary for drop to work
+                event.preventDefault(); // Necessary to allow dropping
             }
 
             handleDrop(event) {
@@ -131,15 +137,18 @@
                     };
                 });
 
-                // Update state without directly manipulating the DOM
-                const draggingItem = this.state.items.find(item => item.content === event.dataTransfer.getData('text/plain'));
+                // Determine the dragged and target items
+                const draggedContent = event.dataTransfer.getData('text/plain');
+                const draggedItem = this.state.items.find(item => item.content === draggedContent);
                 const dropTarget = event.target.closest('list-item');
                 const dropTargetIndex = this.state.items.findIndex(item => item.id === parseInt(dropTarget.getAttribute('data-id')));
-                const draggingIndex = this.state.items.findIndex(item => item === draggingItem);
+                const draggedIndex = this.state.items.findIndex(item => item === draggedItem);
 
-                this.state.items.splice(draggingIndex, 1);
-                this.state.items.splice(dropTargetIndex, 0, draggingItem);
+                // Reorder items in state
+                this.state.items.splice(draggedIndex, 1);
+                this.state.items.splice(dropTargetIndex, 0, draggedItem);
 
+                // Re-render the component
                 this.render();
             }
         }
